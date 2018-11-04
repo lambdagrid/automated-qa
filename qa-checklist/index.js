@@ -18,27 +18,22 @@ const intentional404 = () => request(url('/asdf'));
 const intentional401 = () => request(url('/todos'));
 
 let apiKey = '';
-const getApiKey = () => request({
-  uri: url('/api-keys'),
-  method: 'POST',
-}).then(res => {
+const getApiKey = () => request.post(url('/api-keys')).then(res => {
   apiKey = res.data.api_key;
 });
 
 const getListOfTodos = () => request(url('/todos', apiKey));
 
-const invalidTodoCreation = () => request({
+const invalidTodoCreation = () => request.post({
   uri: url('/todos', apiKey),
-  method: 'POST',
   body: {
     this_payload_format_is: 'wrong',
   },
   json: true,
 });
 
-const validTodoCreation1 = () => request({
+const validTodoCreation1 = () => request.post({
   uri: url('/todos', apiKey),
-  method: 'POST',
   body: {
     text: "brush teeth",
   },
@@ -55,9 +50,8 @@ const stripIdFromList = res => {
   return res;
 };
 
-const validTodoCreation2 = () => request({
+const validTodoCreation2 = () => request.post({
   uri: url('/todos', apiKey),
-  method: 'POST',
   body: {
     text: "wash face",
   },
@@ -71,18 +65,16 @@ const copyIds = todosRes => {
   return todosRes;
 };
 
-const todoChange1 = () => request({
+const todoChange1 = () => request.put({
   uri: url(`/todos/${id1}`, apiKey),
-  method: 'PUT',
   body: {
     done: true,
   },
   json: true,
 });
 
-const todoChange2 = () => request({
+const todoChange2 = () => request.put({
   uri: url(`/todos/${id2}`, apiKey),
-  method: 'PUT',
   body: {
     text: "wash face gently"
   },
@@ -90,14 +82,9 @@ const todoChange2 = () => request({
 });
 
 let apiKey2 = '';
-const get2ndApiKey = () => request({
-  uri: url('/api-keys'),
-  method: 'POST',
-}).then(res => {
+const get2ndApiKey = () => request.post(url('/api-keys')).then(res => {
   apiKey2 = res.data.api_key;
 });
-
-const getSecondList = () => request(url('/todos', apiKey2));
 
 flow("Basic API functionality", done => {
 
@@ -135,20 +122,14 @@ flow("Basic API functionality", done => {
   .then(check("second todo has new text", stripIdFromList))
 
   .then(act("get a second API key", get2ndApiKey))
-  .then(act("get list of todos for second API key", getSecondList))
+  .then(act("get todos for second API key", () => request(url('/todos', apiKey2))))
   .then(check("second list should be empty"))
 
-  .then(act("delete a todo", () => request({
-    uri: url(`/todos/${id1}`),
-    method: 'DELETE',
-  })))
+  .then(act("delete a todo", () => request.del(url(`/todos/${id1}`))))
   .then(getListOfTodos)
   .then(check("first todo is deleted", stripIdFromList))
 
-  .then(act("delete second todo", () => request({
-    uri: url(`/todos/${id2}`),
-    method: 'DELETE',
-  })))
+  .then(act("delete second todo", () => request.delete(url(`/todos/${id2}`))))
   .then(getListOfTodos)
   .then(check("second todo is deleted", stripIdFromList))
 
