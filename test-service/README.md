@@ -7,7 +7,7 @@ _A simple Todo API to demonstrate hosted end-to-end testing._
 This API server exposes a service that allows any client create an API key and
 start managing a list of todo items.
 
-And API key can be created using the `/api-key` endpoint and all subsequent
+And API key can be created using the `/api-keys` endpoint and all subsequent
 requests will require it to perform any operation on your list of todos.
 
 The todos are persisted in a database for retrieval at a later point, but,
@@ -17,8 +17,8 @@ will all be erased when the API key associated with them is deleted.
 
 method|path
 -:|:-|
-`POST`|`/api-key`
-`DELETE`|`/api-key`
+`POST`|`/api-keys`
+`DELETE`|`/api-keys`
 `GET`|`/todos`
 `POST`|`/todos`
 `PUT`|`/todos/<id>`
