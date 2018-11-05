@@ -1,0 +1,26 @@
+{
+  "name": "automated-qa",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server/index.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "ROOT=http://localhost:3000 node ./test/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lambdagrid/automated-qa.git"
+  },
+  "author": "Dillon Forrest",
+  "license": "GPL-3.0",
+  "bugs": {
+    "url": "https://github.com/lambdagrid/automated-qa/issues"
+  },
+  "homepage": "https://github.com/lambdagrid/automated-qa#readme",
+  "dependencies": {
+    "request": "^2.88.0",
+    "request-promise-native": "^1.0.5"
+  }
+}
