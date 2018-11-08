@@ -50,8 +50,13 @@ export class Flow extends Record({ id: 0, name: "", assertions: List<Assertion>(
   }
 }
 
+// Ordered list of registered Flow's
 let FLOWS = List<Flow>();
+// Ordered list of list of `act` or `check` functions to call in order
+// when running a Flow.
 let FLOW_FNS = List<List<(data: any) => any>>();
+// Flow currently being defined, must be a global so that top-level
+// `act` and `check` can know on which Flow to add their functions & assertions
 let currentFlow: Flow = null;
 
 export function flow(name: string, fn: () => () => void) {
