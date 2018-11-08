@@ -91,33 +91,42 @@ interface IV0RunPayload {
   flows: IV0RunPayloadFlow[];
 }
 
-function validateV0RunPayload(payload: object): [Map<string, Flow>, boolean] {
-  let flows = Map<string, Flow>();
+function validateV0RunPayload(payload: object): [List<Flow>, boolean] {
+  let flows = List<Flow>();
   const isValid = new Ajv().validate(V0RunPayloadSchema, payload);
   if (!isValid) {
     return [flows, false];
   }
 
   for (const payloadFlow of (payload as IV0RunPayload).flows) {
-    let assertions = Map<string, Assertion>();
+    let assertions = List<Assertion>();
     payloadFlow.assertions.forEach((a) => {
-      assertions = assertions.set(a.name, new Assertion(a));
+      assertions = assertions.push(new Assertion(a));
     });
     const flow = new Flow({ name: payloadFlow.name, assertions });
-    flows = flows.set(flow.name, flow);
+    flows = flows.push(flow);
   }
 
   return [flows, true];
 }
 
-function handleV0Run(app: Application, req: express.Request, res: express.Response) {
+async function handleV0Run(app: Application, req: express.Request, res: express.Response) {
   const [flows, isValid] = validateV0RunPayload(req.body);
   if (!isValid) {
     res.status(400).json({ error: Application.Errors.BadRequest });
     return;
   }
 
-  res.json({flows: run(flows)});
+  const result = await run(flows);
+  const response = result.map((f: Flow) => ({
+    assertions: f.assertions.map((a: Assertion) => ({
+      name: a.name,
+      result: a.result,
+    })).toList().toJS(),
+    name: f.name,
+  })).toList().toJS();
+
+  res.json({flows: response});
 }
 
 export default new Application();

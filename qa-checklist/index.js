@@ -1,4 +1,4 @@
-const { flow, act, check, run } = require("../dist");
+const { flow, act, check } = require("../dist");
 let request = require("request-promise-native");
 
 request = request.defaults({
@@ -74,19 +74,13 @@ const copyIds = (todosRes) => {
 const todoChange1 = () =>
   request.put({
     uri: url(`/todos/${id1}`, apiKey),
-    body: {
-      done: true,
-    },
-    json: true,
+    body: { done: true },
   });
 
 const todoChange2 = () =>
   request.put({
     uri: url(`/todos/${id2}`, apiKey),
-    body: {
-      text: "wash face gently",
-    },
-    json: true,
+    body: { text: "wash face gently" },
   });
 
 let apiKey2 = "";
@@ -133,11 +127,11 @@ flow("Basic API functionality", () => {
   act("get todos for second API key", () => request(url("/todos", apiKey2)));
   check("second list should be empty");
 
-  act("delete a todo", () => request.del(url(`/todos/${id1}`)));
+  act("delete a todo", () => request.del(url(`/todos/${id1}`, apiKey)));
   act("fetch todos", getListOfTodos);
   check("first todo is deleted", stripIdFromList);
 
-  act("delete second todo", () => request.delete(url(`/todos/${id2}`)));
+  act("delete second todo", () => request.delete(url(`/todos/${id2}`, apiKey)));
   act("fetch todos", getListOfTodos);
   check("second todo is deleted", stripIdFromList);
 
@@ -149,5 +143,3 @@ flow("Basic API functionality", () => {
   act("test first API key", getListOfTodos);
   check("first key should be invalid");
 });
-
-run();

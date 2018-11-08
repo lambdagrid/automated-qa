@@ -1,98 +1,112 @@
-const request = require('request-promise-native');
+const assert = require("assert");
+const request = require("request-promise-native");
 
 const url = (path) => `${process.env.ROOT}${path}`;
 
 const json404 = JSON.stringify({
-  "error": {
-    "code": 4002,
-    "message": "Requested resource not found",
-    "cause": "The request's URI points to a resource which does not exist."
-  }
+  error: {
+    code: 4002,
+    message: "Requested resource not found",
+    cause: "The request's URI points to a resource which does not exist.",
+  },
 });
 
 const json401 = JSON.stringify({
-  "error": {
-    "code": 4000,
-    "message": "Missing or invalid API key.",
-    "cause": "The API key is either missing, is no longer active, or malformed."
-  }
+  error: {
+    code: 4000,
+    message: "Missing or invalid API key.",
+    cause: "The API key is either missing, is no longer active, or malformed.",
+  },
 });
 
 const json400 = JSON.stringify({
-  "error": {
-    "code": 4001,
-    "message": "Missing or invalid request payload.",
-    "cause": "The request's payload is either missing or malformed."
-  }
+  error: {
+    code: 4001,
+    message: "Missing or invalid request payload.",
+    cause: "The request's payload is either missing or malformed.",
+  },
 });
 
 const noTodos = JSON.stringify({
-  "data": {
-    "todos": []
-  }
+  data: {
+    todos: [],
+  },
 });
 
 const firstTodoCreate = JSON.stringify({
-  "data": {
-    "todo": {
-      "text": "brush teeth",
-      "done": false
-    }
-  }
+  data: {
+    todo: {
+      text: "brush teeth",
+      done: false,
+    },
+  },
 });
 
 const afterFirstTodoCreate = JSON.stringify({
   data: {
-    todos: [{
-      text: "brush teeth",
-      done: false,
-    }]
-  }
+    todos: [
+      {
+        text: "brush teeth",
+        done: false,
+      },
+    ],
+  },
 });
 
 const afterSecondTodoCreate = JSON.stringify({
   data: {
-    todos: [{
-      text: "brush teeth",
-      done: false,
-    }, {
-      text: "wash face",
-      done: false,
-    }]
-  }
+    todos: [
+      {
+        text: "brush teeth",
+        done: false,
+      },
+      {
+        text: "wash face",
+        done: false,
+      },
+    ],
+  },
 });
 
 const afterFirstTodoUpdate = JSON.stringify({
   data: {
-    todos: [{
-      text: "brush teeth",
-      done: true,
-    }, {
-      text: "wash face",
-      done: false,
-    }]
-  }
+    todos: [
+      {
+        text: "brush teeth",
+        done: true,
+      },
+      {
+        text: "wash face",
+        done: false,
+      },
+    ],
+  },
 });
 
 const afterSecondTodoUpdate = JSON.stringify({
   data: {
-    todos: [{
-      text: "brush teeth",
-      done: true,
-    }, {
-      text: "wash face gently",
-      done: false,
-    }]
-  }
+    todos: [
+      {
+        text: "brush teeth",
+        done: true,
+      },
+      {
+        text: "wash face gently",
+        done: false,
+      },
+    ],
+  },
 });
 
 const afterFirstTodoDelete = JSON.stringify({
   data: {
-    todos: [{
-      text: "wash face gently",
-      done: false,
-    }]
-  }
+    todos: [
+      {
+        text: "wash face gently",
+        done: false,
+      },
+    ],
+  },
 });
 
 const payload1 = {
@@ -155,10 +169,10 @@ const payload1 = {
         {
           name: "first key should be invalid",
           snapshot: json401,
-        }
-      ]
-    }
-  ]
+        },
+      ],
+    },
+  ],
 };
 
 const desired1 = {
@@ -221,10 +235,10 @@ const desired1 = {
         {
           name: "first key should be invalid",
           result: "MATCH",
-        }
-      ]
-    }
-  ]
+        },
+      ],
+    },
+  ],
 };
 
 const payload2 = {
@@ -273,10 +287,10 @@ const payload2 = {
         },
         {
           name: "first key should be invalid",
-        }
-      ]
-    }
-  ]
+        },
+      ],
+    },
+  ],
 };
 
 const desired2 = {
@@ -339,10 +353,10 @@ const desired2 = {
         {
           name: "first key should be invalid",
           result: "NEW",
-        }
-      ]
-    }
-  ]
+        },
+      ],
+    },
+  ],
 };
 
 const payload3 = {
@@ -405,10 +419,10 @@ const payload3 = {
         {
           name: "first key should be invalid",
           snapshot: "intentionally bad snapshot",
-        }
-      ]
-    }
-  ]
+        },
+      ],
+    },
+  ],
 };
 
 const desired3 = {
@@ -471,33 +485,36 @@ const desired3 = {
         {
           name: "first key should be invalid",
           result: "MISS",
-        }
-      ]
-    }
-  ]
+        },
+      ],
+    },
+  ],
 };
 
 async function runTests() {
   const observed1 = await request.post({
-    uri: url('/v0/run'),
+    uri: url("/v0/run"),
     body: payload1,
     json: true,
   });
-  console.log('observed1 == desired1', observed1 == desired1);
+  assert.deepEqual(observed1, desired1);
+  console.log("payload 1 passed");
 
   const observed2 = await request.post({
-    uri: url('/v0/run'),
+    uri: url("/v0/run"),
     body: payload2,
     json: true,
   });
-  console.log('observed2 == desired2', observed2 == desired2);
+  assert.deepEqual(observed2, desired2);
+  console.log("payload 2 passed");
 
   const observed3 = await request.post({
-    uri: url('/v0/run'),
+    uri: url("/v0/run"),
     body: payload3,
     json: true,
   });
-  console.log('observed3 == desired3', observed3 == desired3);
+  assert.deepEqual(observed3, desired3);
+  console.log("payload 3 passed");
 }
 
 runTests();

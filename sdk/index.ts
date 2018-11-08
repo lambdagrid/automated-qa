@@ -9,12 +9,14 @@ enum AssertionResult {
 }
 
 interface IAssertionParams {
+  id?: number;
   name?: string;
   result?: AssertionResult;
   value?: string;
   snapshot?: string;
 }
-export class Assertion extends Record({ name: "", result: AssertionResult.Unknown, snapshot: "", value: "" }) {
+export class Assertion extends Record({ id: 0, name: "", result: AssertionResult.Unknown, snapshot: "", value: "" }) {
+  public id: number;
   public name: string;
   public result: AssertionResult;
   public value: string;
@@ -30,12 +32,14 @@ export class Assertion extends Record({ name: "", result: AssertionResult.Unknow
 }
 
 interface IFlowParams {
+  id?: number;
   name?: string;
-  assertions?: Map<string, Assertion>;
+  assertions?: List<Assertion>;
 }
-export class Flow extends Record({ name: "", assertions: Map<string, Assertion>() }) {
+export class Flow extends Record({ id: 0, name: "", assertions: List<Assertion>() }) {
+  public id: number;
   public name: string;
-  public assertions: Map<string, Assertion>;
+  public assertions: List<Assertion>;
 
   constructor(params?: IFlowParams) {
     super(params);
@@ -46,8 +50,8 @@ export class Flow extends Record({ name: "", assertions: Map<string, Assertion>(
   }
 }
 
-let FLOWS = Map<string, Flow>();
-let FLOW_FNS = Map<string, List<(data: any) => any>>();
+let FLOWS = List<Flow>();
+let FLOW_FNS = List<List<(data: any) => any>>();
 let currentFlow: Flow = null;
 
 export function flow(name: string, fn: () => () => void) {
@@ -56,9 +60,9 @@ export function flow(name: string, fn: () => () => void) {
   }
 
   // Setup globals
-  currentFlow = new Flow({name});
-  FLOWS = FLOWS.set(name, currentFlow);
-  FLOW_FNS = FLOW_FNS.set(name, List<(data: any) => any>());
+  currentFlow = new Flow({id: FLOWS.size, name});
+  FLOWS = FLOWS.push(currentFlow);
+  FLOW_FNS = FLOW_FNS.push(List<(data: any) => any>());
 
   // Call callback wich in turn will be calling act and check
   fn();
@@ -71,8 +75,7 @@ export function act(name: string, fn: (data: any) => Promise<any>) {
   if (!currentFlow) {
     throw new Error("You can't call `act` outside of a flow.");
   }
-  const flowName = currentFlow.name;
-  FLOW_FNS = FLOW_FNS.set(flowName, FLOW_FNS.get(flowName).push((data: any) => {
+  FLOW_FNS = FLOW_FNS.update(currentFlow.id, (fns) => fns.push((data: any) => {
     /* tslint:disable-next-line:no-console */
     console.log("  ACT: " + name);
     return Promise.resolve().then(() => fn(data));
@@ -83,29 +86,80 @@ export function check(name: string, fn: (data: any) => Promise<any>) {
   if (!currentFlow) {
     throw new Error("You can't call `check` outside of a flow.");
   }
-  const flowName = currentFlow.name;
-  FLOW_FNS = FLOW_FNS.set(flowName, FLOW_FNS.get(flowName).push((data: any) => {
+  const parentFlow = FLOWS.get(currentFlow.id);
+  const assertion = new Assertion({ id: parentFlow.assertions.size, name });
+  FLOWS = FLOWS.set(parentFlow.id, parentFlow.with({
+    assertions: parentFlow.assertions.push(assertion),
+  }));
+  FLOW_FNS = FLOW_FNS.update(parentFlow.id, (fns) => fns.push((data: any) => {
     /* tslint:disable-next-line:no-console */
     console.log("CHECK: " + name);
     return Promise.resolve().then(() => fn ? fn(data) : data).then((value) => {
-      const f = FLOWS.get(flowName);
-      FLOWS.set(flowName, f.with({
-        assertions: f.assertions.set(name, new Assertion({ name, value })),
+      // Re-fetch flow & assertion value out of globals because our reverences
+      // are pointing to outdated immutable versions
+      const f = FLOWS.get(parentFlow.id);
+      const a = f.assertions.get(assertion.id);
+
+      // Compute assertion result
+      let result = AssertionResult.New;
+      if (a.snapshot) {
+        try {
+          deepEqual(value, JSON.parse(a.snapshot));
+          result = AssertionResult.Match;
+        } catch (e) {
+          /* tslint:disable:no-console */
+          console.log("     : " + JSON.stringify(value));
+          console.log("     : !=");
+          console.log("     : " + a.snapshot);
+          /* tslint:enable:no-console */
+          result = AssertionResult.Miss;
+        }
+      }
+
+      // Save assertion result & new snapshot value
+      FLOWS = FLOWS.set(f.id, f.with({
+        assertions: f.assertions.set(a.id, a.with({
+          result, value: JSON.stringify(value),
+        })),
       }));
     });
   }));
 }
 
-export async function run(flows: Map<string, Flow>) {
-  const flowNames = FLOWS.keys();
-  for (const flowName of flowNames) {
+export async function run(flows: List<Flow>) {
+  // Merge registered flows with provided flows (w/ snapshots)
+  for (const f of flows) {
+    const fMatch = FLOWS.find((f2) => f2.name === f.name);
+    if (fMatch) {
+      let mergedAssertions = f.assertions;
+      for (const a of f.assertions) {
+        const aMatch = fMatch.assertions.find((a2) => a2.name === a.name);
+        if (aMatch) {
+          mergedAssertions = mergedAssertions.set(aMatch.id, aMatch.with({
+            result: a.result,
+            snapshot: a.snapshot,
+          }));
+        } else {
+          mergedAssertions = mergedAssertions.push(a.with({id: mergedAssertions.size}));
+        }
+      }
+      FLOWS = FLOWS.set(f.id, f.with({assertions: mergedAssertions}));
+    } else {
+      FLOWS = FLOWS.push(f.with({id: FLOWS.size}));
+    }
+  }
+
+  // Run flows
+  for (const f of FLOWS.toSeq()) {
     /* tslint:disable-next-line:no-console */
-    console.log(" FLOW: " + flowName);
-    const fns = FLOW_FNS.get(flowName);
+    console.log(" FLOW: " + f.name);
+    const fns = FLOW_FNS.get(f.id);
     let result = null;
     for (const fn of fns) {
       result = await fn(result);
     }
-    console.log(FLOWS.toJS());
   }
+
+  console.log("FINAL", FLOWS.toJS());
+  return FLOWS;
 }

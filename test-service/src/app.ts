@@ -47,7 +47,7 @@ export class Application {
   public setupConfig() {
     this.config = new Map();
     this.config.set("env", process.env.NODE_ENV || "development");
-    this.config.set("port", process.env.PORT || "3000");
+    this.config.set("port", process.env.PORT || "3001");
     this.config.set("databaseUrl", process.env.DATABASE_URL || "postgresql://admin:admin@localhost:5432/todos");
   }
 
@@ -204,7 +204,7 @@ class TodoService {
   }
 
   public async findAll(apiKeyId: number): Promise<Todo[]> {
-    const result = await this.app.database.query(`select * from todos where api_key_id = $1`, [apiKeyId]);
+    const result = await this.app.database.query(`select * from todos where api_key_id = $1 order by id`, [apiKeyId]);
     return result.rows.map(this.entityFromRow);
   }
 }
@@ -285,7 +285,7 @@ async function handleTodosCreate(app: Application, req: express.Request, res: ex
 }
 
 async function handleTodosUpdate(app: Application, req: express.Request, res: express.Response) {
-  if (!req.body || typeof req.body.text !== "string") {
+  if (!req.body || (req.body.text && typeof req.body.text !== "string")) {
     return res.status(400).json({ error: Application.Errors.BadRequest });
   }
 
@@ -296,7 +296,9 @@ async function handleTodosUpdate(app: Application, req: express.Request, res: ex
   }
 
   // Update matching todo fields and save changes to the database
-  todo.text = req.body.text;
+  if (req.body.text) {
+    todo.text = req.body.text;
+  }
   if (req.body.done) {
     todo.done = true;
   }
