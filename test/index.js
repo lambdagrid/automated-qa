@@ -1,7 +1,8 @@
 const assert = require("assert");
 const request = require("request-promise-native");
 
-const url = (path) => `${process.env.ROOT}${path}`;
+const ROOT = process.env.ROOT || "http://localhost:3000";
+const url = (path) => `${ROOT}${path}`;
 
 const json404 = JSON.stringify({
   error: {

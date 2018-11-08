@@ -7,7 +7,7 @@ request = request.defaults({
 });
 
 const url = (path, key) => {
-  const root = process.env.TARGET_ROOT;
+  const root = process.env.TARGET_ROOT || "localhost:3001";
   if (key) {
     return `http://${key}@${root}${path}`;
   } else {

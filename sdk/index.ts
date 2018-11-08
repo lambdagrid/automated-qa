@@ -160,6 +160,5 @@ export async function run(flows: List<Flow>) {
     }
   }
 
-  console.log("FINAL", FLOWS.toJS());
   return FLOWS;
 }

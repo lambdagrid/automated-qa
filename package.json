@@ -7,12 +7,11 @@
     "test": "test"
   },
   "scripts": {
-    "start": "TARGET_ROOT=localhost:3001 node dist/server/index.js",
-    "startTestService": "PORT=3001 node test-service/dist/index.js",
+    "start": "node dist/server/index.js",
     "build": "tsc",
-    "dev": "tsc --watch & TARGET_ROOT=localhost:3001 nodemon dist/server/index.js",
+    "dev": "tsc --watch & nodemon dist/server/index.js",
     "lint": "tslint sdk/**/*.ts",
-    "test": "ROOT=http://localhost:3000 node ./test/index.js"
+    "test": "node ./test/index.js"
   },
   "repository": {
     "type": "git",
