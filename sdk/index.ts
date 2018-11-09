@@ -69,7 +69,7 @@ export function flow(name: string, fn: () => () => void) {
   FLOWS = FLOWS.push(currentFlow);
   FLOW_FNS = FLOW_FNS.push(List<(data: any) => any>());
 
-  // Call callback wich in turn will be calling act and check
+  // Call callback which in turn will be calling act and check
   fn();
 
   // Clear globals so the `flow` can be called again
