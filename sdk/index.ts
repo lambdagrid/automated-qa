@@ -100,7 +100,7 @@ export function check(name: string, fn: (data: any) => Promise<any>) {
     /* tslint:disable-next-line:no-console */
     console.log("CHECK: " + name);
     return Promise.resolve().then(() => fn ? fn(data) : data).then((value) => {
-      // Re-fetch flow & assertion value out of globals because our reverences
+      // Re-fetch flow & assertion value out of globals because our references
       // are pointing to outdated immutable versions
       const f = FLOWS.get(parentFlow.id);
       const a = f.assertions.get(assertion.id);
