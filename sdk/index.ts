@@ -61,7 +61,7 @@ let currentFlow: Flow = null;
 
 export function flow(name: string, fn: () => () => void) {
   if (currentFlow) {
-    throw new Error("You can't nest flows. Do now call `flow` within an other `flow` definition.");
+    throw new Error("You can't nest flows. Do not call `flow` within an other `flow` definition.");
   }
 
   // Setup globals
