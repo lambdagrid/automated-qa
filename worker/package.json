@@ -1,5 +1,5 @@
 {
-  "name": "automated-qa",
+  "name": "automated-qa-worker",
   "version": "1.0.0",
   "description": "",
   "main": "dist/index.js",
@@ -10,8 +10,7 @@
     "start": "node dist/server/index.js",
     "build": "tsc",
     "dev": "tsc --watch & nodemon dist/server/index.js",
-    "lint": "tslint sdk/**/*.ts",
-    "test": "node ./test/index.js"
+    "lint": "tslint src/**/*.ts"
   },
   "repository": {
     "type": "git",

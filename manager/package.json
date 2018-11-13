@@ -1,17 +1,17 @@
 {
-  "name": "automated-qa-test-service",
+  "name": "automated-qa-manager",
   "version": "1.0.0",
   "description": "",
   "main": "dist/index.js",
   "scripts": {
-    "start": "node dist/index.js",
+    "start": "node dist/server/index.js",
     "build": "tsc",
     "dev": "tsc --watch & nodemon dist",
     "lint": "tslint src/**/*.ts",
-    "test": "tsc && env NODE_ENV=test mocha --reporter spec --bail dist/**/*.spec.js",
+    "test": "tsc && env NODE_ENV=test mocha --reporter spec --exit --bail dist/**/*.spec.js",
     "dbsetup": "npm run dbuser && npm run dbcreate && node scripts/setupDatabase.js",
-    "dbreset": "psql -c \"DROP DATABASE todos;\" && npm run dbsetup",
-    "dbcreate": "psql -c \"CREATE DATABASE todos WITH OWNER admin;\" || true",
+    "dbreset": "psql -c \"DROP DATABASE automatedqa;\" && npm run dbsetup",
+    "dbcreate": "psql -c \"CREATE DATABASE automatedqa WITH OWNER admin;\" || true",
     "dbuser": "psql -q -c \"CREATE ROLE admin WITH SUPERUSER LOGIN PASSWORD 'admin';\" || true"
   },
   "keywords": [],
