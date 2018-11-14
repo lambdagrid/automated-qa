@@ -253,10 +253,18 @@ class ChecklistService {
   }
 
   public async delete(id: number) {
+    await this.app.database.query(`delete from snapshots where flow_id in
+      (select id from flows where checklist_id = $1)`, [id]);
+    await this.app.database.query(`delete from flows where checklist_id = $1`, [id]);
     await this.app.database.query(`delete from checklists where id = $1`, [id]);
   }
 
   public async deleteByApiKeyId(id: number) {
+    await this.app.database.query(`delete from snapshots where flow_id in
+      (select id from flows where checklist_id in
+        (select id from checklists where api_key_id = $1))`, [id]);
+    await this.app.database.query(`delete from flows where checklist_id in
+      (select id from checklists where api_key_id = $1)`, [id]);
     await this.app.database.query(`delete from checklists where api_key_id = $1`, [id]);
   }
 
