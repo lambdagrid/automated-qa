@@ -1,8 +1,10 @@
+import * as Ajv from "ajv";
 import * as bodyParser from "body-parser";
 import * as crypto from "crypto";
 import * as express from "express";
 import * as pg from "pg";
 import * as request from "request-promise-native";
+import { V1SnapshotsUpdatePayload } from "./schemas";
 
 declare global {
   namespace Express {
@@ -76,6 +78,7 @@ export class Application {
     r.put("/v1/checklists/:id", authenticate, handleChecklistsUpdate.bind(null, this));
     r.delete("/v1/checklists/:id", authenticate, handleChecklistsDelete.bind(null, this));
     r.post("/v1/checklists/:id/run", authenticate, handleChecklistsRun.bind(null, this));
+    r.post("/v1/checklists/:id/snapshots", authenticate, handleSnapshotsUpdate.bind(null, this));
 
     r.use(handleNotFound.bind(null, this));
   }
@@ -378,6 +381,13 @@ class SnapshotService {
     return this.entityFromRow(result.rows[0]);
   }
 
+  public async update(checklistId: number, flowName: string, name: string, value: string): Promise<void> {
+    const query = `insert into snapshots (flow_id, name, value)
+      values ((select id from flows where checklist_id = $1 and name = $2), $3, $4)
+      on conflict (flow_id, name) do nothing`;
+    await this.app.database.query(query, [checklistId, flowName, name, value]);
+  }
+
   public async findAllByFlow(flowId: number): Promise<Snapshot[]> {
     const query = `select * from snapshots where flow_id = $1 order by id`;
     const result = await this.app.database.query(query, [flowId]);
@@ -510,6 +520,36 @@ async function handleChecklistsRun(app: Application, req: express.Request, res: 
   }
   const flows = await app.checklistService.run(checklist);
   res.status(200).json({ data: { flows } });
+}
+
+interface ISnapshotsUpdatePayloadSnapshot {
+  name: string;
+  value: string;
+}
+
+interface ISnapshotsUpdatePayloadFlow {
+  name: string;
+  snapshots: ISnapshotsUpdatePayloadSnapshot[];
+}
+
+async function handleSnapshotsUpdate(app: Application, req: express.Request, res: express.Response) {
+  const isValid = new Ajv().validate(V1SnapshotsUpdatePayload, req.body);
+  if (!isValid) {
+    return res.status(400).json({ error: Application.Errors.BadRequest });
+  }
+
+  // Find requested checklist
+  const checklist = await app.checklistService.find(req.params.id, req.currentApiKey.id);
+  if (!checklist) {
+    return res.status(404).json({ error: Application.Errors.NotFound });
+  }
+
+  for (const flow of req.body.flows as ISnapshotsUpdatePayloadFlow[]) {
+    for (const snapshot of flow.snapshots) {
+      await app.snapshotService.update(checklist.id, flow.name, snapshot.name, snapshot.value);
+    }
+  }
+  res.status(201).json({ data: { flows: req.body.flows } });
 }
 
 function handleNotFound(app: Application, req: express.Request, res: express.Response) {

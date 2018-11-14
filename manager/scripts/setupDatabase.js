@@ -27,7 +27,8 @@ async function setupDatabase() {
     id serial primary key,
     flow_id integer references flows (id),
     name text not null,
-    value text not null
+    value text not null,
+    unique (flow_id, name)
   )`);
   console.log("Database tables api_keys, checklists, flows and snapshots created.");
   client.end();

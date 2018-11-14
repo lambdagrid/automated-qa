@@ -343,3 +343,43 @@ describe("Checklists", () => {
     });
   });
 });
+
+describe("Snapshots", () => {
+  let apiKey: ApiKey = null;
+
+  before(async () => {
+    apiKey = await app.apiKeyService.create();
+  });
+
+  beforeEach(async () => {
+    await app.database.query(`truncate checklists, flows, snapshots`);
+  });
+
+  it("Update (POST /v1/checklists/<id>/snapshots)", async () => {
+    const checklist = await app.checklistService.create(apiKey.id, "http://localhost:3000");
+    const flow = await app.flowService.create(checklist.id, "API 1");
+    const snapshot1 = await app.snapshotService.create(flow.id, "Assertion 1", "!");
+    const snapshot2 = await app.snapshotService.create(flow.id, "Assertion 2", "@");
+
+    const flows = [{
+      name: flow.name,
+      snapshots: [{
+        name: snapshot2.name,
+        value: "###",
+      }],
+    }];
+
+    const response = await supertest(app.httpServer)
+      .post("/v1/checklists/" + String(checklist.id) + "/snapshots")
+      .set("Authorization", authorizationHeaderForKey(apiKey.key))
+      .set("Accept", "application/json")
+      .send({ flows })
+      .expect("Content-Type", /json/)
+      .expect(201);
+
+    assert.deepEqual(response.body, { data: { flows } });
+
+    const snapshots = await app.snapshotService.findAllByFlow(flow.id);
+    assert.deepEqual(snapshots.map((s) => s.value), ["!", "@"]);
+  });
+});
