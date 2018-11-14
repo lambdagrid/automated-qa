@@ -2,6 +2,8 @@ import * as assert from "assert";
 import * as supertest from "supertest";
 import app, { ApiKey, Application } from "./app";
 
+// tslint:disable:max-line-length
+
 const apiKeyIdSubquery = `(select id from api_keys where key = $1)`;
 
 function authorizationHeaderForKey(key: string) {
@@ -226,64 +228,118 @@ describe("Checklists", () => {
     assert.deepEqual(response.body.error, Application.Errors.NotFound);
   });
 
-  it("Run (POST /v1/checklists/<id>/run)", async () => {
-    const checklist = await app.checklistService.create(apiKey.id, "http://localhost:3000");
-
-    const response = await supertest(app.httpServer)
-      .post("/v1/checklists/" + String(checklist.id) + "/run")
+  async function callRun(checklistId: number) {
+    return await supertest(app.httpServer)
+      .post("/v1/checklists/" + String(checklistId) + "/run")
       .set("Authorization", authorizationHeaderForKey(apiKey.key))
       .set("Accept", "application/json")
       .expect("Content-Type", /json/)
       .expect(200);
+  }
+
+  it("Run (POST /v1/checklists/<id>/run) - All New", async () => {
+    const checklist = await app.checklistService.create(apiKey.id, "http://localhost:3000");
+
+    const response = await callRun(checklist.id);
     assert.deepEqual(response.body, {
       data: {
         flows: [{
           assertions: [{
             name: "returns 404 not found",
             result: "NEW",
+            snapshot: "{\"error\":{\"cause\":\"The request's URI points to a resource which does not exist.\",\"code\":4002,\"message\":\"Requested resource not found\"}}",
           }, {
             name: "returns 401 not authorized",
             result: "NEW",
+            snapshot: "{\"error\":{\"cause\":\"The API key is either missing, is no longer active, or malformed.\",\"code\":4000,\"message\":\"Missing or invalid API key.\"}}",
           }, {
             name: "list should be empty",
             result: "NEW",
+            snapshot: "{\"data\":{\"todos\":[]}}",
           }, {
             name: "invalid todos should return 4xx",
             result: "NEW",
+            snapshot: "{\"error\":{\"cause\":\"The request's payload is either missing or malformed.\",\"code\":4001,\"message\":\"Missing or invalid request payload.\"}}",
           }, {
             name: "returns a 201",
             result: "NEW",
+            snapshot: "{\"data\":{\"todo\":{\"text\":\"brush teeth\",\"done\":false}}}",
           }, {
             name: "list should have one todo",
             result: "NEW",
+            snapshot: "{\"data\":{\"todos\":[{\"text\":\"brush teeth\",\"done\":false}]}}",
           }, {
             name: "list should have two items",
             result: "NEW",
+            snapshot: "{\"data\":{\"todos\":[{\"text\":\"brush teeth\",\"done\":false},{\"text\":\"wash face\",\"done\":false}]}}",
           }, {
             name: "first todo should be done",
             result: "NEW",
+            snapshot: "{\"data\":{\"todos\":[{\"text\":\"brush teeth\",\"done\":true},{\"text\":\"wash face\",\"done\":false}]}}",
           }, {
             name: "second todo has new text",
             result: "NEW",
+            snapshot: "{\"data\":{\"todos\":[{\"text\":\"brush teeth\",\"done\":true},{\"text\":\"wash face gently\",\"done\":false}]}}",
           }, {
             name: "second list should be empty",
             result: "NEW",
+            snapshot: "{\"data\":{\"todos\":[]}}",
           }, {
             name: "first todo is deleted",
             result: "NEW",
+            snapshot: "{\"data\":{\"todos\":[{\"text\":\"wash face gently\",\"done\":false}]}}",
           }, {
             name: "second todo is deleted",
             result: "NEW",
+            snapshot: "{\"data\":{\"todos\":[]}}",
           }, {
             name: "second key should be invalid",
             result: "NEW",
+            snapshot: "{\"error\":{\"cause\":\"The API key is either missing, is no longer active, or malformed.\",\"code\":4000,\"message\":\"Missing or invalid API key.\"}}",
           }, {
             name: "first key should be invalid",
             result: "NEW",
+            snapshot: "{\"error\":{\"cause\":\"The API key is either missing, is no longer active, or malformed.\",\"code\":4000,\"message\":\"Missing or invalid API key.\"}}",
           }],
           name: "Basic API functionality",
+          summary: {
+            match: 0, miss: 0, new: 14,
+          },
         }],
       },
+    });
+
+    const flowsResult = await app.database.query(`select * from flows`);
+    assert.equal(flowsResult.rows.length, 1);
+    const snapshotsResult = await app.database.query(`select * from snapshots`);
+    assert.equal(snapshotsResult.rows.length, 14);
+  });
+
+  it("Run (POST /v1/checklists/<id>/run) - All Match", async () => {
+    const checklist = await app.checklistService.create(apiKey.id, "http://localhost:3000");
+    await callRun(checklist.id);
+    const response = await callRun(checklist.id);
+    assert.deepEqual(response.body.data.flows[0].summary, {
+      match: 14, miss: 0, new: 0,
+    });
+  });
+
+  it("Run (POST /v1/checklists/<id>/run) - One Miss", async () => {
+    const checklist = await app.checklistService.create(apiKey.id, "http://localhost:3000");
+
+    await callRun(checklist.id);
+    await app.database.query(`update snapshots set value = '!' where name = $1`, ["first key should be invalid"]);
+
+    const response = await callRun(checklist.id);
+    assert.deepEqual(response.body.data.flows[0].summary, {
+      match: 13, miss: 1, new: 0,
+    });
+    const assertions = response.body.data.flows[0].assertions;
+    assert.deepEqual(assertions[assertions.length - 1], {
+      expectedSnapshot: "!",
+      name: "first key should be invalid",
+      result: "MISS",
+      snapshot: "{\"error\":{\"cause\":\"The API key is either missing, is no longer active, or malformed.\",\"code\":4000,\"message\":\"Missing or invalid API key.\"}}",
     });
   });
 });

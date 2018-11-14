@@ -143,20 +143,33 @@ export class Flow {
   constructor(id: number, name: string) {
     this.id = id;
     this.name = name;
+    this.assertions = [];
+    this.summary = { match: 0, miss: 0, new: 0 } as IFlowRunSummary;
   }
 }
 
 export class Assertion {
+  public id: number;
   public name: string;
   public snapshot: string;
   public expectedSnapshot: string;
   public result: string;
 
-  constructor(name: string, snapshot: string, expectedSnapshot: string, result: string) {
+  constructor(id: number, name: string, snapshot: string, expectedSnapshot: string, result: string) {
+    this.id = id;
     this.name = name;
     this.snapshot = snapshot;
     this.expectedSnapshot = expectedSnapshot;
     this.result = result;
+  }
+
+  // Stips the `[2]` from the end of the snapshot name (like `1 + 1 is equal to 2 [2]`
+  public nameWithoutNumber() {
+    const parts = this.name.split("[");
+    if (parts.length > 1) {
+      return parts.slice(0, -1).join("[");
+    }
+    return this.name;
   }
 }
 
@@ -171,13 +184,8 @@ export class Snapshot {
     this.value = value;
   }
 
-  // Stips the `[2]` from the end of the snapshot name (like `1 + 1 is equal to 2 [2]`
-  public assertionName() {
-    const parts = this.name.split("[");
-    if (parts.length > 1) {
-      return parts.slice(0, -1).join("[");
-    }
-    return this.name;
+  public toAssertion(): Assertion {
+    return new Assertion(this.id, this.name, this.value, "", "");
   }
 }
 
@@ -270,15 +278,13 @@ class ChecklistService {
     const flows = await this.app.flowService.findAllByChecklist(checklist.id);
     for (const flow of flows) {
       const snapshots = await this.app.snapshotService.findAllByFlow(flow.id);
-      flow.assertions = snapshots.map((s) => new Assertion(
-        s.assertionName(), s.value, "", "",
-      ));
+      flow.assertions = snapshots.map((s) => s.toAssertion());
     }
     const result = await request.post({
       body: {
         flows: flows.map((f) => ({
           assertions: f.assertions.map((a) => ({
-            name: a.name,
+            name: a.nameWithoutNumber(),
             snapshot: a.snapshot,
           })),
           name: f.name,
@@ -287,7 +293,42 @@ class ChecklistService {
       json: true,
       uri: checklist.workerOrigin + "/v0/run",
     });
-    console.log(result);
+
+    for (const flow of result.flows) {
+      flow.summary = { match: 0, miss: 0, new: 0 } as IFlowRunSummary;
+
+      let databaseFlow = flows.find((f) => f.name === flow.name);
+      if (!databaseFlow) {
+        databaseFlow = await this.app.flowService.create(checklist.id, flow.name);
+      }
+
+      const assertionsSeen = new Map<string, number>();
+      for (const assertion of flow.assertions) {
+        // Compute assertion name (accounting for duplicates)
+        let assertionName = assertion.name;
+        if (assertionsSeen.get(assertion.name) > 0) {
+          assertionName += "[" + String(assertionsSeen.get(assertion.name) + 1) + "]";
+        }
+        assertionsSeen.set(assertion.Name, assertionsSeen.get(assertion.Name) + 1);
+
+        // Create missing / new snapshots
+        let databaseAssertion = databaseFlow.assertions.find((a) => a.name === assertionName);
+        if (!databaseAssertion) {
+          const snapshot = await this.app.snapshotService.create(
+            databaseFlow.id, assertionName, assertion.snapshot,
+          );
+          databaseAssertion = snapshot.toAssertion();
+        }
+
+        // Augment worker response with saved snapshot data & summary
+        assertion.name = assertionName;
+        if (assertion.result === "MISS") {
+          assertion.expectedSnapshot = databaseAssertion.snapshot;
+        }
+        flow.summary[assertion.result.toLowerCase()]++;
+      }
+    }
+
     return result.flows as Flow[];
   }
 }
@@ -301,6 +342,14 @@ class FlowService {
 
   public entityFromRow(row: { id: number; name: string }): Flow {
     return new Flow(row.id, row.name);
+  }
+
+  public async create(checklistId: number, name: string): Promise<Flow> {
+    const result = await this.app.database.query(
+      `insert into flows (checklist_id, name) values ($1, $2) returning *`,
+      [checklistId, name],
+    );
+    return this.entityFromRow(result.rows[0]);
   }
 
   public async findAllByChecklist(checklistId: number): Promise<Flow[]> {
@@ -321,8 +370,16 @@ class SnapshotService {
     return new Snapshot(row.id, row.name, row.value);
   }
 
+  public async create(flowId: number, name: string, value: string): Promise<Snapshot> {
+    const result = await this.app.database.query(
+      `insert into snapshots (flow_id, name, value) values ($1, $2, $3) returning *`,
+      [flowId, name, value],
+    );
+    return this.entityFromRow(result.rows[0]);
+  }
+
   public async findAllByFlow(flowId: number): Promise<Snapshot[]> {
-    const query = `select * from snapshots where checklist_id = $1 order by id`;
+    const query = `select * from snapshots where flow_id = $1 order by id`;
     const result = await this.app.database.query(query, [flowId]);
     return result.rows.map(this.entityFromRow);
   }
@@ -336,20 +393,16 @@ function middlewareLog(app: Application, req: express.Request, res: express.Resp
   next();
 }
 
-function middlewareError(app: Application, req: express.Request, res: express.Response, next: () => void) {
-  try {
-    next();
-  } catch (err) {
-    if (app.config.get("env") !== "test") {
-      // tslint:disable-next-line:no-console
-      console.error(err);
-    }
-    res.status(500).json({
-      cause: "An unknow error occured while processing this request.",
-      code: 5000,
-      message: "Internal server error.",
-    });
+function middlewareError(app: Application, req: express.Request, res: express.Response, next: () => void, err: any) {
+  if (app.config.get("env") !== "test") {
+    // tslint:disable-next-line:no-console
+    console.error(err);
   }
+  res.status(500).json({
+    cause: "An unknow error occured while processing this request.",
+    code: 5000,
+    message: "Internal server error.",
+  });
 }
 
 async function middlewareAuthenticate(
