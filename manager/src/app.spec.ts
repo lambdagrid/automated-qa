@@ -225,4 +225,65 @@ describe("Checklists", () => {
       .expect(404);
     assert.deepEqual(response.body.error, Application.Errors.NotFound);
   });
+
+  it("Run (POST /v1/checklists/<id>/run)", async () => {
+    const checklist = await app.checklistService.create(apiKey.id, "http://localhost:3000");
+
+    const response = await supertest(app.httpServer)
+      .post("/v1/checklists/" + String(checklist.id) + "/run")
+      .set("Authorization", authorizationHeaderForKey(apiKey.key))
+      .set("Accept", "application/json")
+      .expect("Content-Type", /json/)
+      .expect(200);
+    assert.deepEqual(response.body, {
+      data: {
+        flows: [{
+          assertions: [{
+            name: "returns 404 not found",
+            result: "NEW",
+          }, {
+            name: "returns 401 not authorized",
+            result: "NEW",
+          }, {
+            name: "list should be empty",
+            result: "NEW",
+          }, {
+            name: "invalid todos should return 4xx",
+            result: "NEW",
+          }, {
+            name: "returns a 201",
+            result: "NEW",
+          }, {
+            name: "list should have one todo",
+            result: "NEW",
+          }, {
+            name: "list should have two items",
+            result: "NEW",
+          }, {
+            name: "first todo should be done",
+            result: "NEW",
+          }, {
+            name: "second todo has new text",
+            result: "NEW",
+          }, {
+            name: "second list should be empty",
+            result: "NEW",
+          }, {
+            name: "first todo is deleted",
+            result: "NEW",
+          }, {
+            name: "second todo is deleted",
+            result: "NEW",
+          }, {
+            name: "second key should be invalid",
+            result: "NEW",
+          }, {
+            name: "first key should be invalid",
+            result: "NEW",
+          }],
+          name: "Basic API functionality",
+        }],
+      },
+    });
+  });
 });

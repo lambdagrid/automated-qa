@@ -2,6 +2,7 @@ import * as bodyParser from "body-parser";
 import * as crypto from "crypto";
 import * as express from "express";
 import * as pg from "pg";
+import * as request from "request-promise-native";
 
 declare global {
   namespace Express {
@@ -38,10 +39,14 @@ export class Application {
 
   public apiKeyService: ApiKeyService;
   public checklistService: ChecklistService;
+  public flowService: FlowService;
+  public snapshotService: SnapshotService;
 
   constructor() {
     this.apiKeyService = new ApiKeyService(this);
     this.checklistService = new ChecklistService(this);
+    this.flowService = new FlowService(this);
+    this.snapshotService = new SnapshotService(this);
   }
 
   public setupConfig() {
@@ -58,6 +63,7 @@ export class Application {
     this.httpServer.use("/", this.router);
 
     r.use(middlewareLog.bind(null, this));
+    r.use(middlewareError.bind(null, this));
     r.use(middlewareAuthenticate.bind(null, this));
 
     r.get("/", handleIndex.bind(null, this));
@@ -131,11 +137,47 @@ interface IFlowRunSummary {
 export class Flow {
   public id: number;
   public name: string;
+  public assertions: Assertion[];
   public summary: IFlowRunSummary;
 
   constructor(id: number, name: string) {
     this.id = id;
     this.name = name;
+  }
+}
+
+export class Assertion {
+  public name: string;
+  public snapshot: string;
+  public expectedSnapshot: string;
+  public result: string;
+
+  constructor(name: string, snapshot: string, expectedSnapshot: string, result: string) {
+    this.name = name;
+    this.snapshot = snapshot;
+    this.expectedSnapshot = expectedSnapshot;
+    this.result = result;
+  }
+}
+
+export class Snapshot {
+  public id: number;
+  public name: string;
+  public value: string;
+
+  constructor(id: number, name: string, value: string) {
+    this.id = id;
+    this.name = name;
+    this.value = value;
+  }
+
+  // Stips the `[2]` from the end of the snapshot name (like `1 + 1 is equal to 2 [2]`
+  public assertionName() {
+    const parts = this.name.split("[");
+    if (parts.length > 1) {
+      return parts.slice(0, -1).join("[");
+    }
+    return this.name;
   }
 }
 
@@ -225,6 +267,64 @@ class ChecklistService {
   }
 
   public async run(checklist: Checklist): Promise<Flow[]> {
+    const flows = await this.app.flowService.findAllByChecklist(checklist.id);
+    for (const flow of flows) {
+      const snapshots = await this.app.snapshotService.findAllByFlow(flow.id);
+      flow.assertions = snapshots.map((s) => new Assertion(
+        s.assertionName(), s.value, "", "",
+      ));
+    }
+    const result = await request.post({
+      body: {
+        flows: flows.map((f) => ({
+          assertions: f.assertions.map((a) => ({
+            name: a.name,
+            snapshot: a.snapshot,
+          })),
+          name: f.name,
+        })),
+      },
+      json: true,
+      uri: checklist.workerOrigin + "/v0/run",
+    });
+    console.log(result);
+    return result.flows as Flow[];
+  }
+}
+
+class FlowService {
+  public app: Application;
+
+  constructor(app: Application) {
+    this.app = app;
+  }
+
+  public entityFromRow(row: { id: number; name: string }): Flow {
+    return new Flow(row.id, row.name);
+  }
+
+  public async findAllByChecklist(checklistId: number): Promise<Flow[]> {
+    const query = `select * from flows where checklist_id = $1 order by id`;
+    const result = await this.app.database.query(query, [checklistId]);
+    return result.rows.map(this.entityFromRow);
+  }
+}
+
+class SnapshotService {
+  public app: Application;
+
+  constructor(app: Application) {
+    this.app = app;
+  }
+
+  public entityFromRow(row: { id: number; name: string, value: string }): Snapshot {
+    return new Snapshot(row.id, row.name, row.value);
+  }
+
+  public async findAllByFlow(flowId: number): Promise<Snapshot[]> {
+    const query = `select * from snapshots where checklist_id = $1 order by id`;
+    const result = await this.app.database.query(query, [flowId]);
+    return result.rows.map(this.entityFromRow);
   }
 }
 
@@ -234,6 +334,22 @@ function middlewareLog(app: Application, req: express.Request, res: express.Resp
     console.log("%s %s", req.method, req.url);
   }
   next();
+}
+
+function middlewareError(app: Application, req: express.Request, res: express.Response, next: () => void) {
+  try {
+    next();
+  } catch (err) {
+    if (app.config.get("env") !== "test") {
+      // tslint:disable-next-line:no-console
+      console.error(err);
+    }
+    res.status(500).json({
+      cause: "An unknow error occured while processing this request.",
+      code: 5000,
+      message: "Internal server error.",
+    });
+  }
 }
 
 async function middlewareAuthenticate(
