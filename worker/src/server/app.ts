@@ -122,6 +122,7 @@ async function handleV0Run(app: Application, req: express.Request, res: express.
     assertions: f.assertions.map((a: Assertion) => ({
       name: a.name,
       result: a.result,
+      snapshot: a.value,
     })).toList().toJS(),
     name: f.name,
   })).toList().toJS();

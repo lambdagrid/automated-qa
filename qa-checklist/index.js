@@ -1,4 +1,4 @@
-const { flow, act, check } = require("../dist");
+const { flow, act, check } = require("../worker/dist");
 let request = require("request-promise-native");
 
 request = request.defaults({

@@ -2,7 +2,7 @@ export const V0RunPayloadSchema = {
   definitions: {
     assertion: {
       properties: {
-        name: { type: "string", minLength: 1 },
+        name: { type: "string" },
         snapshot: { type: "string" },
       },
       required: ["name"],
@@ -12,10 +12,9 @@ export const V0RunPayloadSchema = {
       properties: {
         assertions: {
           items: { $ref: "#/definitions/assertion" },
-          minItems: 1,
           type: "array",
         },
-        name: { type: "string", minLength: 1 },
+        name: { type: "string" },
       },
       required: ["name", "assertions"],
       type: "object",
@@ -24,7 +23,6 @@ export const V0RunPayloadSchema = {
   properties: {
     flows: {
       items: { $ref: "#/definitions/flow" },
-      minItems: 1,
       type: "array",
     },
   },

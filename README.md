@@ -71,6 +71,7 @@ To run it start by starting up the _dev_ server for the `test-service` and
 the automated QA "worker" server using:
 
 ```
+$ cd worker
 $ npm run dev
 ```
 

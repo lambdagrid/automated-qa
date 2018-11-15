@@ -132,6 +132,11 @@ export function check(name: string, fn: (data: any) => Promise<any>) {
 }
 
 export async function run(flows: List<Flow>) {
+  // Clear flows of snapshots
+  FLOWS = FLOWS.map((f) => f.with({
+    assertions: f.assertions.map((a) => a.with({ snapshot: null })),
+  }));
+
   // Merge registered flows with provided flows (w/ snapshots)
   for (const f of flows) {
     const fMatch = FLOWS.find((f2) => f2.name === f.name);
@@ -145,12 +150,12 @@ export async function run(flows: List<Flow>) {
             snapshot: a.snapshot,
           }));
         } else {
-          mergedAssertions = mergedAssertions.push(a.with({id: mergedAssertions.size}));
+          mergedAssertions = mergedAssertions.push(a.with({ id: mergedAssertions.size }));
         }
       }
       FLOWS = FLOWS.set(f.id, f.with({assertions: mergedAssertions}));
     } else {
-      FLOWS = FLOWS.push(f.with({id: FLOWS.size}));
+      FLOWS = FLOWS.push(f.with({ id: FLOWS.size }));
     }
   }
 

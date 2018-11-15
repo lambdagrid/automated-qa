@@ -1,17 +1,17 @@
 {
-  "name": "automated-qa-test-service",
+  "name": "automated-qa-manager",
   "version": "1.0.0",
   "description": "",
   "main": "dist/index.js",
   "scripts": {
-    "start": "node dist/index.js",
+    "start": "node dist/server/index.js",
     "build": "tsc",
     "dev": "tsc --watch & nodemon dist",
     "lint": "tslint src/**/*.ts",
-    "test": "tsc && env NODE_ENV=test mocha --reporter spec --bail dist/**/*.spec.js",
+    "test": "tsc && env NODE_ENV=test mocha --reporter spec --exit --bail dist/**/*.spec.js",
     "dbsetup": "npm run dbuser && npm run dbcreate && node scripts/setupDatabase.js",
-    "dbreset": "psql -c \"DROP DATABASE todos;\" && npm run dbsetup",
-    "dbcreate": "psql -c \"CREATE DATABASE todos WITH OWNER admin;\" || true",
+    "dbreset": "psql -c \"DROP DATABASE automatedqa;\" && npm run dbsetup",
+    "dbcreate": "psql -c \"CREATE DATABASE automatedqa WITH OWNER admin;\" || true",
     "dbuser": "psql -q -c \"CREATE ROLE admin WITH SUPERUSER LOGIN PASSWORD 'admin';\" || true"
   },
   "keywords": [],
@@ -22,6 +22,7 @@
     "@types/mocha": "5.2.5",
     "@types/node": "10.12.0",
     "@types/pg": "7.4.11",
+    "@types/request-promise-native": "1.0.15",
     "@types/supertest": "2.0.6",
     "mocha": "5.2.0",
     "supertest": "3.3.0",
@@ -32,6 +33,7 @@
     "body-parser": "1.18.3",
     "express": "4.16.4",
     "nodemon": "1.18.4",
-    "pg": "7.5.0"
+    "pg": "7.5.0",
+    "request-promise-native": "1.0.5"
   }
 }
