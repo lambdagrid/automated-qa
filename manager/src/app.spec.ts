@@ -1,6 +1,7 @@
 import * as assert from "assert";
 import * as supertest from "supertest";
-import app, { ApiKey, Application } from "./app";
+import app, { Application } from "./app";
+import { ApiKey } from "./entities";
 
 // tslint:disable:max-line-length
 
