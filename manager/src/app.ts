@@ -1,5 +1,6 @@
 import * as Ajv from "ajv";
 import * as bodyParser from "body-parser";
+import { CronJob } from "cron";
 import * as express from "express";
 import * as pg from "pg";
 
@@ -23,6 +24,8 @@ import {
   SnapshotService,
   WebhookService,
 } from "./services";
+
+const noop = (): void => { /* do nothing */ };
 
 declare global {
   namespace Express {
@@ -103,10 +106,10 @@ export class Application {
     r.post("/v1/checklists/:id/run", authenticate, handleChecklistsRun.bind(null, this));
     r.post("/v1/checklists/:id/snapshots", authenticate, handleSnapshotsUpdate.bind(null, this));
 
-    r.get("/v1/checklists", authenticate, handleChecklistsList.bind(null, this));
-    r.post("/v1/checklists", authenticate, handleChecklistsCreate.bind(null, this));
-    r.put("/v1/checklists/:id", authenticate, handleChecklistsUpdate.bind(null, this));
-    r.delete("/v1/checklists/:id", authenticate, handleChecklistsDelete.bind(null, this));
+    r.get("/v1/schedules", authenticate, handleSchedulesList.bind(null, this));
+    r.post("/v1/schedules", authenticate, handleSchedulesCreate.bind(null, this));
+    r.put("/v1/schedules/:id", authenticate, handleSchedulesUpdate.bind(null, this));
+    r.delete("/v1/schedules/:id", authenticate, handleSchedulesDelete.bind(null, this));
 
     r.use(handleNotFound.bind(null, this));
   }
@@ -293,6 +296,66 @@ async function handleSnapshotsUpdate(app: Application, req: express.Request, res
     }
   }
   res.status(201).json({ data: { flows: req.body.flows } });
+}
+
+async function handleSchedulesList(app: Application, req: express.Request, res: express.Response) {
+  const schedules = await app.scheduleService.findAll(req.currentApiKey.id);
+  res.status(200).json({ data: { schedules } });
+}
+
+async function handleSchedulesCreate(app: Application, req: express.Request, res: express.Response) {
+  if (!req.body || typeof req.body.cron !== "string" || typeof req.body.checklistId !== "number") {
+    return res.status(400).json({ error: Application.Errors.BadRequest });
+  }
+  // Verify the provided cron spec is valid
+  try {
+    const job = new CronJob(req.body.cron, noop);
+  } catch (e) {
+    return res.status(400).json({ error: Application.Errors.BadRequest });
+  }
+  // Verify the current api key owns the target checklistId
+  const checklist = await app.checklistService.find(req.body.checklistId, req.currentApiKey.id);
+  if (!checklist) {
+    return res.status(404).json({ error: Application.Errors.NotFound });
+  }
+
+  const schedule = await app.scheduleService.create(req.body.checklistId, req.body.cron);
+  res.status(201).json({ data: { schedule } });
+}
+
+async function handleSchedulesUpdate(app: Application, req: express.Request, res: express.Response) {
+  if (!req.body || typeof req.body.cron !== "string") {
+    return res.status(400).json({ error: Application.Errors.BadRequest });
+  }
+
+  // Verify the provided cron spec is valid
+  try {
+    const job = new CronJob(req.body.cron, noop);
+  } catch (e) {
+    return res.status(400).json({ error: Application.Errors.BadRequest });
+  }
+  // Find requested schedule
+  const schedule = await app.scheduleService.find(req.params.id, req.currentApiKey.id);
+  if (!schedule) {
+    return res.status(404).json({ error: Application.Errors.NotFound });
+  }
+
+  // Update matching schedule fields and save changes to the database
+  schedule.cron = req.body.cron;
+  // TODO update next run
+  await app.scheduleService.update(schedule);
+
+  res.status(200).json({ data: { schedule } });
+}
+
+async function handleSchedulesDelete(app: Application, req: express.Request, res: express.Response) {
+  // Find requested schedule
+  const schedule = await app.scheduleService.find(req.params.id, req.currentApiKey.id);
+  if (!schedule) {
+    return res.status(404).json({ error: Application.Errors.NotFound });
+  }
+  await app.scheduleService.delete(schedule.id);
+  res.status(200).json({ message: "Successfully deleted." });
 }
 
 function handleNotFound(app: Application, req: express.Request, res: express.Response) {

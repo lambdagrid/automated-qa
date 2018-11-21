@@ -232,8 +232,44 @@ export class ScheduleService {
     this.app = app;
   }
 
-  public entityFromRow(row: { id: number; checklistId: number, cron: string }): Schedule {
-    return new Schedule(row.id, row.checklistId, row.cron);
+  public entityFromRow(row: { id: number; checklist_id: number, cron: string }): Schedule {
+    return new Schedule(row.id, row.checklist_id, row.cron);
+  }
+
+  public async create(checklistId: number, cron: string): Promise<Schedule> {
+    const result = await this.app.database.query(
+      `insert into schedules (checklist_id, cron) values ($1, $2) returning *`,
+      [checklistId, cron],
+    );
+    return this.entityFromRow(result.rows[0]);
+  }
+
+  public async update(schedule: Schedule): Promise<void> {
+    const query = `update schedules set cron = $2 where id = $1`;
+    await this.app.database.query(query, [schedule.id, schedule.cron]);
+  }
+
+  public async delete(id: number) {
+    await this.app.database.query(`delete from schedules where id = $1`, [id]);
+  }
+
+  public async find(id: number, apiKeyId: number): Promise<Schedule> {
+    const query = `select * from schedules where id = $1
+      and checklist_id in (select id from checklists where api_key_id = $2)
+      order by id`;
+    const result = await this.app.database.query(query, [id, apiKeyId]);
+    if (result.rows.length === 0) {
+      return null;
+    }
+    return this.entityFromRow(result.rows[0]);
+  }
+
+  public async findAll(apiKeyId: number): Promise<Schedule[]> {
+    const query = `select * from schedules
+      where checklist_id in (select id from checklists where api_key_id = $1)
+      order by id`;
+    const result = await this.app.database.query(query, [apiKeyId]);
+    return result.rows.map(this.entityFromRow);
   }
 }
 
