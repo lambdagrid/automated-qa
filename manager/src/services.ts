@@ -255,8 +255,7 @@ export class ScheduleService {
 
   public async find(id: number, apiKeyId: number): Promise<Schedule> {
     const query = `select * from schedules where id = $1
-      and checklist_id in (select id from checklists where api_key_id = $2)
-      order by id`;
+      and checklist_id in (select id from checklists where api_key_id = $2)`;
     const result = await this.app.database.query(query, [id, apiKeyId]);
     if (result.rows.length === 0) {
       return null;
@@ -280,7 +279,39 @@ export class WebhookService {
     this.app = app;
   }
 
-  public entityFromRow(row: { id: number; eventType: WebhookEventType, url: string }): Webhook {
-    return new Webhook(row.id, row.eventType, row.url);
+  public entityFromRow(row: { id: number; event_type: WebhookEventType, url: string }): Webhook {
+    return new Webhook(row.id, row.event_type, row.url);
+  }
+
+  public async create(apiKeyId: number, eventType: string, url: string): Promise<Webhook> {
+    const result = await this.app.database.query(
+      `insert into webhooks (api_key_id, event_type, url) values ($1, $2, $3) returning *`,
+      [apiKeyId, eventType, url],
+    );
+    return this.entityFromRow(result.rows[0]);
+  }
+
+  public async update(webhook: Webhook): Promise<void> {
+    const query = `update webhooks set event_type = $2, url = $3 where id = $1`;
+    await this.app.database.query(query, [webhook.id, webhook.eventType, webhook.url]);
+  }
+
+  public async delete(id: number) {
+    await this.app.database.query(`delete from webhooks where id = $1`, [id]);
+  }
+
+  public async find(id: number, apiKeyId: number): Promise<Webhook> {
+    const query = `select * from webhooks where id = $1 and api_key_id = $2`;
+    const result = await this.app.database.query(query, [id, apiKeyId]);
+    if (result.rows.length === 0) {
+      return null;
+    }
+    return this.entityFromRow(result.rows[0]);
+  }
+
+  public async findAll(apiKeyId: number): Promise<Webhook[]> {
+    const query = `select * from webhooks where api_key_id = $1 order by id`;
+    const result = await this.app.database.query(query, [apiKeyId]);
+    return result.rows.map(this.entityFromRow);
   }
 }

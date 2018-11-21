@@ -96,6 +96,10 @@ export enum WebhookEventType {
   ScheduledChecklistStart = "SCHEDULED_CHECKLIST_START",
   ScheduledChecklistEnd = "SCHEDULED_CHECKLIST_END",
 }
+export const WebhookEventTypes = [
+  WebhookEventType.ScheduledChecklistStart,
+  WebhookEventType.ScheduledChecklistEnd,
+];
 
 export class Webhook {
   public id: number;

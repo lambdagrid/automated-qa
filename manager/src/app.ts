@@ -14,6 +14,7 @@ import {
   Snapshot,
   Webhook,
   WebhookEventType,
+  WebhookEventTypes,
 } from "./entities";
 import { V1SnapshotsUpdatePayload } from "./schemas";
 import {
@@ -110,6 +111,11 @@ export class Application {
     r.post("/v1/schedules", authenticate, handleSchedulesCreate.bind(null, this));
     r.put("/v1/schedules/:id", authenticate, handleSchedulesUpdate.bind(null, this));
     r.delete("/v1/schedules/:id", authenticate, handleSchedulesDelete.bind(null, this));
+
+    r.get("/v1/webhooks", authenticate, handleWebhooksList.bind(null, this));
+    r.post("/v1/webhooks", authenticate, handleWebhooksCreate.bind(null, this));
+    r.put("/v1/webhooks/:id", authenticate, handleWebhooksUpdate.bind(null, this));
+    r.delete("/v1/webhooks/:id", authenticate, handleWebhooksDelete.bind(null, this));
 
     r.use(handleNotFound.bind(null, this));
   }
@@ -355,6 +361,59 @@ async function handleSchedulesDelete(app: Application, req: express.Request, res
     return res.status(404).json({ error: Application.Errors.NotFound });
   }
   await app.scheduleService.delete(schedule.id);
+  res.status(200).json({ message: "Successfully deleted." });
+}
+
+async function handleWebhooksList(app: Application, req: express.Request, res: express.Response) {
+  const webhooks = await app.webhookService.findAll(req.currentApiKey.id);
+  res.status(200).json({ data: { webhooks } });
+}
+
+async function handleWebhooksCreate(app: Application, req: express.Request, res: express.Response) {
+  if (!req.body || typeof req.body.url !== "string" || WebhookEventTypes.indexOf(req.body.eventType) === -1) {
+    return res.status(400).json({ error: Application.Errors.BadRequest });
+  }
+
+  const webhook = await app.webhookService.create(req.currentApiKey.id, req.body.eventType, req.body.url);
+  res.status(201).json({ data: { webhook } });
+}
+
+async function handleWebhooksUpdate(app: Application, req: express.Request, res: express.Response) {
+  if (!req.body) {
+    return res.status(400).json({ error: Application.Errors.BadRequest });
+  }
+
+  // Find requested webhook
+  const webhook = await app.webhookService.find(req.params.id, req.currentApiKey.id);
+  if (!webhook) {
+    return res.status(404).json({ error: Application.Errors.NotFound });
+  }
+
+  // Update provided webhook fields and save changes to the database
+  if ("url" in req.body) {
+    if (typeof req.body.url !== "string") {
+      return res.status(400).json({ error: Application.Errors.BadRequest });
+    }
+    webhook.url = req.body.url;
+  }
+  if ("eventType" in req.body) {
+    if (WebhookEventTypes.indexOf(req.body.eventType) === -1) {
+      return res.status(400).json({ error: Application.Errors.BadRequest });
+    }
+    webhook.eventType = req.body.eventType;
+  }
+  await app.webhookService.update(webhook);
+
+  res.status(200).json({ data: { webhook } });
+}
+
+async function handleWebhooksDelete(app: Application, req: express.Request, res: express.Response) {
+  // Find requested webhook
+  const webhook = await app.webhookService.find(req.params.id, req.currentApiKey.id);
+  if (!webhook) {
+    return res.status(404).json({ error: Application.Errors.NotFound });
+  }
+  await app.webhookService.delete(webhook.id);
   res.status(200).json({ message: "Successfully deleted." });
 }
 

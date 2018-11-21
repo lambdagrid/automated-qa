@@ -1,7 +1,7 @@
 import * as assert from "assert";
 import * as supertest from "supertest";
 import app, { Application } from "./app";
-import { ApiKey } from "./entities";
+import { ApiKey, WebhookEventType } from "./entities";
 
 // tslint:disable:max-line-length
 
@@ -87,7 +87,7 @@ describe("Checklists", () => {
   });
 
   beforeEach(async () => {
-    await app.database.query(`truncate checklists, flows, snapshots`);
+    await app.database.query(`truncate checklists, flows, snapshots, schedules`);
   });
 
   it("List (GET /v1/checklists) - No Checklist", async () => {
@@ -353,7 +353,7 @@ describe("Snapshots", () => {
   });
 
   beforeEach(async () => {
-    await app.database.query(`truncate checklists, flows, snapshots`);
+    await app.database.query(`truncate checklists, flows, snapshots, schedules`);
   });
 
   it("Update (POST /v1/checklists/<id>/snapshots)", async () => {
@@ -519,9 +519,150 @@ describe("Schedules", () => {
     assert(schedules.length === 0);
   });
 
-  it.only("Delete (DELETE /v1/schedules/<id>) - Not Found", async () => {
+  it("Delete (DELETE /v1/schedules/<id>) - Not Found", async () => {
     const response = await supertest(app.httpServer)
       .delete("/v1/schedules/1")
+      .set("Authorization", authorizationHeaderForKey(apiKey.key))
+      .set("Accept", "application/json")
+      .expect("Content-Type", /json/)
+      .expect(404);
+    assert.deepEqual(response.body.error, Application.Errors.NotFound);
+  });
+});
+
+describe("Webhooks", () => {
+  let apiKey: ApiKey = null;
+
+  before(async () => {
+    apiKey = await app.apiKeyService.create();
+  });
+
+  beforeEach(async () => {
+    await app.database.query(`truncate webhooks`);
+  });
+
+  it("List (GET /v1/webhooks) - No item", async () => {
+    const response = await supertest(app.httpServer)
+      .get("/v1/webhooks")
+      .set("Authorization", authorizationHeaderForKey(apiKey.key))
+      .set("Accept", "application/json")
+      .expect("Content-Type", /json/)
+      .expect(200);
+    assert.deepEqual(response.body, { data: { webhooks: [] } });
+  });
+
+  it("List (GET /v1/webhooks) - Multiple items", async () => {
+    const result = await app.database.query(
+      `insert into webhooks (api_key_id, event_type, url)
+        values ($1, 'start', 'http://1'), ($1, 'end', 'http://2') returning *`,
+      [apiKey.id],
+    );
+    const webhooks = result.rows.map((r: { id: number; event_type: string, url: string }) => ({
+      eventType: r.event_type,
+      id: r.id,
+      url: r.url,
+    }));
+
+    const response = await supertest(app.httpServer)
+      .get("/v1/webhooks")
+      .set("Authorization", authorizationHeaderForKey(apiKey.key))
+      .set("Accept", "application/json")
+      .expect("Content-Type", /json/)
+      .expect(200);
+    assert.deepEqual(response.body, { data: { webhooks } });
+  });
+
+  it("Create (POST /v1/webhooks)", async () => {
+    const response = await supertest(app.httpServer)
+      .post("/v1/webhooks")
+      .set("Authorization", authorizationHeaderForKey(apiKey.key))
+      .set("Accept", "application/json")
+      .send({ eventType: WebhookEventType.ScheduledChecklistStart, url: "http://1" })
+      .expect("Content-Type", /json/)
+      .expect(201);
+    const webhooks = await app.webhookService.findAll(apiKey.id);
+    assert.deepEqual(response.body, { data: { webhook: webhooks[0] } });
+  });
+
+  it("Create (POST /v1/webhooks) - Bad Request", async () => {
+    const response = await supertest(app.httpServer)
+      .post("/v1/webhooks")
+      .set("Authorization", authorizationHeaderForKey(apiKey.key))
+      .set("Accept", "application/json")
+      .send({ url: "", eventType: "something else" })
+      .expect("Content-Type", /json/)
+      .expect(400);
+    assert.deepEqual(response.body.error, Application.Errors.BadRequest);
+  });
+
+  it("Update (PUT /v1/webhooks/<id>)", async () => {
+    const webhook = await app.webhookService.create(
+      apiKey.id,
+      WebhookEventType.ScheduledChecklistStart,
+      "http://localhost:3001",
+    );
+    webhook.url = "http://prod";
+
+    const response = await supertest(app.httpServer)
+      .put("/v1/webhooks/" + String(webhook.id))
+      .set("Authorization", authorizationHeaderForKey(apiKey.key))
+      .set("Accept", "application/json")
+      .send({ url: webhook.url })
+      .expect("Content-Type", /json/)
+      .expect(200);
+    assert.deepEqual(response.body, { data: { webhook } });
+  });
+
+  it("Update (PUT /v1/webhooks/<id>) - Bad Request", async () => {
+    const webhook = await app.webhookService.create(
+      apiKey.id,
+      WebhookEventType.ScheduledChecklistStart,
+      "http://localhost:3001",
+    );
+
+    const response = await supertest(app.httpServer)
+      .put("/v1/webhooks/" + String(webhook.id))
+      .set("Authorization", authorizationHeaderForKey(apiKey.key))
+      .set("Accept", "application/json")
+      .send({ url: 0 })
+      .expect("Content-Type", /json/)
+      .expect(400);
+    assert.deepEqual(response.body.error, Application.Errors.BadRequest);
+  });
+
+  it("Update (PUT /v1/webhooks/<id>) - Not Found", async () => {
+    const response = await supertest(app.httpServer)
+      .put("/v1/webhooks/1")
+      .set("Authorization", authorizationHeaderForKey(apiKey.key))
+      .set("Accept", "application/json")
+      .send({ cron: "* * * * * *" })
+      .expect("Content-Type", /json/)
+      .expect(404);
+    assert.deepEqual(response.body.error, Application.Errors.NotFound);
+  });
+
+  it("Delete (DELETE /v1/webhooks/<id>)", async () => {
+    const webhook = await app.webhookService.create(
+      apiKey.id,
+      WebhookEventType.ScheduledChecklistStart,
+      "http://localhost:3001",
+    );
+
+    const response = await supertest(app.httpServer)
+      .delete("/v1/webhooks/" + String(webhook.id))
+      .set("Authorization", authorizationHeaderForKey(apiKey.key))
+      .set("Accept", "application/json")
+      .expect("Content-Type", /json/)
+      .expect(200);
+    assert.deepEqual(response.body, { message: "Successfully deleted." });
+
+    const webhooks = await app.webhookService.findAll(apiKey.id);
+    assert(webhooks.length === 0);
+  });
+
+  it("Delete (DELETE /v1/webhooks/<id>) - Not Found", async () => {
+    const response = await supertest(app.httpServer)
+      .delete("/v1/webhooks/1")
       .set("Authorization", authorizationHeaderForKey(apiKey.key))
       .set("Accept", "application/json")
       .expect("Content-Type", /json/)
