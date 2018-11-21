@@ -34,7 +34,9 @@ async function setupDatabase() {
   await client.query(`create table schedules (
     id serial primary key,
     checklist_id integer references checklists (id),
-    cron text not null
+    cron text not null,
+    last_ran_at timestamptz not null,
+    next_run_at timestamptz
   )`);
 
   await client.query(`create table webhooks (

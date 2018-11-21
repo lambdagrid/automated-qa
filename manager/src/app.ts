@@ -135,6 +135,8 @@ export class Application {
   public async start() {
     await this.setup();
 
+    this.scheduleService.startCron();
+
     const port = this.config.get("port");
     this.httpServer.listen(port, (err: Error) => {
       if (err) {
@@ -220,7 +222,7 @@ async function handleApiKeysDelete(app: Application, req: express.Request, res: 
 async function handleChecklistsList(app: Application, req: express.Request, res: express.Response) {
   const checklists = await app.checklistService.findAll(req.currentApiKey.id);
   res.status(200).json({
-    data: { checklists },
+    data: { checklists: checklists.map((c) => c.toJSON()) },
   });
 }
 
@@ -230,7 +232,7 @@ async function handleChecklistsCreate(app: Application, req: express.Request, re
   }
   const checklist = await app.checklistService.create(req.currentApiKey.id, req.body.workerOrigin);
   res.status(201).json({
-    data: { checklist },
+    data: { checklist: checklist.toJSON() },
   });
 }
 
@@ -250,7 +252,7 @@ async function handleChecklistsUpdate(app: Application, req: express.Request, re
   await app.checklistService.update(checklist);
 
   res.status(200).json({
-    data: { checklist },
+    data: { checklist: checklist.toJSON() },
   });
 }
 
@@ -306,7 +308,7 @@ async function handleSnapshotsUpdate(app: Application, req: express.Request, res
 
 async function handleSchedulesList(app: Application, req: express.Request, res: express.Response) {
   const schedules = await app.scheduleService.findAll(req.currentApiKey.id);
-  res.status(200).json({ data: { schedules } });
+  res.status(200).json({ data: { schedules: schedules.map((c) => c.toJSON()) } });
 }
 
 async function handleSchedulesCreate(app: Application, req: express.Request, res: express.Response) {
@@ -314,8 +316,9 @@ async function handleSchedulesCreate(app: Application, req: express.Request, res
     return res.status(400).json({ error: Application.Errors.BadRequest });
   }
   // Verify the provided cron spec is valid
+  let job: CronJob = null;
   try {
-    const job = new CronJob(req.body.cron, noop);
+    job = new CronJob(req.body.cron, noop);
   } catch (e) {
     return res.status(400).json({ error: Application.Errors.BadRequest });
   }
@@ -325,8 +328,8 @@ async function handleSchedulesCreate(app: Application, req: express.Request, res
     return res.status(404).json({ error: Application.Errors.NotFound });
   }
 
-  const schedule = await app.scheduleService.create(req.body.checklistId, req.body.cron);
-  res.status(201).json({ data: { schedule } });
+  const schedule = await app.scheduleService.create(req.body.checklistId, req.body.cron, job.nextDates());
+  res.status(201).json({ data: { schedule: schedule.toJSON() } });
 }
 
 async function handleSchedulesUpdate(app: Application, req: express.Request, res: express.Response) {
@@ -335,8 +338,9 @@ async function handleSchedulesUpdate(app: Application, req: express.Request, res
   }
 
   // Verify the provided cron spec is valid
+  let job: CronJob = null;
   try {
-    const job = new CronJob(req.body.cron, noop);
+    job = new CronJob(req.body.cron, noop);
   } catch (e) {
     return res.status(400).json({ error: Application.Errors.BadRequest });
   }
@@ -348,10 +352,10 @@ async function handleSchedulesUpdate(app: Application, req: express.Request, res
 
   // Update matching schedule fields and save changes to the database
   schedule.cron = req.body.cron;
-  // TODO update next run
+  schedule.nextRunAt = job.nextDates();
   await app.scheduleService.update(schedule);
 
-  res.status(200).json({ data: { schedule } });
+  res.status(200).json({ data: { schedule: schedule.toJSON() } });
 }
 
 async function handleSchedulesDelete(app: Application, req: express.Request, res: express.Response) {

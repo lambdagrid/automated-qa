@@ -1,3 +1,4 @@
+import { CronJob } from "cron";
 import * as crypto from "crypto";
 import * as request from "request-promise-native";
 
@@ -13,6 +14,13 @@ import {
   Webhook,
   WebhookEventType,
 } from "./entities";
+
+const noop = (): void => { /* do nothing */ };
+
+const log = (...args: any[]): void => {
+  // tslint:disable-next-line:no-console
+  console.log(...args);
+};
 
 export class ApiKeyService {
   public app: Application;
@@ -55,8 +63,8 @@ export class ChecklistService {
     this.app = app;
   }
 
-  public entityFromRow(row: { id: number; worker_origin: string }): Checklist {
-    return new Checklist(row.id, row.worker_origin);
+  public entityFromRow(row: { id: number; worker_origin: string; api_key_id: number }): Checklist {
+    return new Checklist(row.id, row.worker_origin, row.api_key_id);
   }
 
   public async create(apiKeyId: number, workerOrigin: string): Promise<Checklist> {
@@ -90,11 +98,14 @@ export class ChecklistService {
     await this.app.database.query(`delete from checklists where api_key_id = $1`, [id]);
   }
 
-  public async find(id: number, apiKeyId: number): Promise<Checklist> {
-    const result = await this.app.database.query(`select * from checklists where id = $1 and api_key_id = $2`, [
-      id,
-      apiKeyId,
-    ]);
+  public async find(id: number, apiKeyId?: number): Promise<Checklist> {
+    let query = `select * from checklists where id = $1`;
+    const params = [id];
+    if (apiKeyId) {
+      query += ` and api_key_id = $2`;
+      params.push(apiKeyId);
+    }
+    const result = await this.app.database.query(query, params);
     if (result.rows.length === 0) {
       return null;
     }
@@ -232,21 +243,23 @@ export class ScheduleService {
     this.app = app;
   }
 
-  public entityFromRow(row: { id: number; checklist_id: number, cron: string }): Schedule {
-    return new Schedule(row.id, row.checklist_id, row.cron);
+  public entityFromRow(row: {
+    id: number; checklist_id: number, cron: string, last_ran_at: Date, next_run_at: Date,
+  }): Schedule {
+    return new Schedule(row.id, row.checklist_id, row.cron, row.last_ran_at, row.next_run_at);
   }
 
-  public async create(checklistId: number, cron: string): Promise<Schedule> {
+  public async create(checklistId: number, cron: string, nextRunAt?: Date): Promise<Schedule> {
     const result = await this.app.database.query(
-      `insert into schedules (checklist_id, cron) values ($1, $2) returning *`,
-      [checklistId, cron],
+      `insert into schedules (checklist_id, cron, last_ran_at, next_run_at) values ($1, $2, now(), $3) returning *`,
+      [checklistId, cron, nextRunAt || null],
     );
     return this.entityFromRow(result.rows[0]);
   }
 
   public async update(schedule: Schedule): Promise<void> {
-    const query = `update schedules set cron = $2 where id = $1`;
-    await this.app.database.query(query, [schedule.id, schedule.cron]);
+    const query = `update schedules set cron = $2, last_ran_at = $3, next_run_at = $4 where id = $1`;
+    await this.app.database.query(query, [schedule.id, schedule.cron, schedule.lastRanAt, schedule.nextRunAt]);
   }
 
   public async delete(id: number) {
@@ -269,6 +282,93 @@ export class ScheduleService {
       order by id`;
     const result = await this.app.database.query(query, [apiKeyId]);
     return result.rows.map(this.entityFromRow);
+  }
+
+  public startCron() {
+    setInterval(() => {
+      this.scheduleSchedules().catch((e) => log("scheduleSchedules:", e));
+      this.runPendingSchedules().catch((e) => log("runPendingSchedules:", e));
+    }, 1000);
+  }
+
+  // When schedules are ran, the next_run_at field is set to null to indicate
+  // to guarantee that no other server/process can pick up the task at the
+  // same moment.
+  // This means that we need to periodically go through schedules that just ran
+  // and re-compute a next_run_at date for them.
+  private async scheduleSchedules() {
+    // Here we add a delay of 1 second before allowing a schedule to get
+    // it's next_run_at schedule computed to avoid the case of a cron job
+    // that would run multiple times in the space of a second
+    const result = await this.app.database.query(`select * from schedules
+      where next_run_at is null
+      and now() - '1 second'::interval > last_ran_at`);
+    const schedules = result.rows.map(this.entityFromRow);
+
+    for (const schedule of schedules) {
+      const job = new CronJob(schedule.cron, noop);
+      schedule.nextRunAt = job.nextDates();
+      await this.update(schedule);
+    }
+  }
+
+  private async runPendingSchedules() {
+    const result = await this.app.database.query(`update schedules
+      set last_ran_at = now(), next_run_at = null
+      where now() >= next_run_at returning *`);
+    const schedules = result.rows.map(this.entityFromRow);
+
+    for (const schedule of schedules) {
+      // Run in setTimeout so that other schedules can all start right on time
+      // (given checklists could take time to run)
+      setTimeout(async () => {
+        const checklist = await this.app.checklistService.find(schedule.checklistId);
+        const webhooks = await this.app.webhookService.findAll(checklist.apiKeyId);
+
+        log("running schedule:", schedule, webhooks);
+
+        // Send "START" webhooks
+        for (const webhook of webhooks) {
+          if (webhook.eventType === WebhookEventType.ScheduledChecklistStart) {
+            request.post({
+              body: {
+                checklistId: checklist.id,
+                eventType: webhook.eventType,
+                scheduleId: schedule.id,
+                webhookId: webhook.id,
+              },
+              json: true,
+              uri: webhook.url,
+            }).catch((e) => log("webhook: scheduled start:", e));
+          }
+        }
+
+        const flows = await this.app.checklistService.run(checklist);
+        const results = { match: 0, miss: 0, new: 0 } as IFlowRunSummary;
+        for (const flow of flows) {
+          results.match += flow.summary.match;
+          results.miss += flow.summary.miss;
+          results.new += flow.summary.new;
+        }
+
+        // Send "END" webhooks
+        for (const webhook of webhooks) {
+          if (webhook.eventType === WebhookEventType.ScheduledChecklistEnd) {
+            request.post({
+              body: {
+                checklistId: checklist.id,
+                eventType: webhook.eventType,
+                results,
+                scheduleId: schedule.id,
+                webhookId: webhook.id,
+              },
+              json: true,
+              uri: webhook.url,
+            }).catch((e) => log("webhook: scheduled end:", e));
+          }
+        }
+      }, 0);
+    }
   }
 }
 

@@ -13,9 +13,17 @@ export class Checklist {
   public apiKeyId: number;
   public workerOrigin: string;
 
-  constructor(id: number, workerOrigin: string) {
+  constructor(id: number, workerOrigin: string, apiKeyId?: number) {
     this.id = id;
     this.workerOrigin = workerOrigin;
+    this.apiKeyId = apiKeyId;
+  }
+
+  public toJSON() {
+    return {
+      id: this.id,
+      workerOrigin: this.workerOrigin,
+    };
   }
 }
 
@@ -84,11 +92,23 @@ export class Schedule {
   public id: number;
   public checklistId: number;
   public cron: string;
+  public lastRanAt: Date;
+  public nextRunAt: Date;
 
-  constructor(id: number, checklistId: number, cron: string) {
+  constructor(id: number, checklistId: number, cron: string, lastRanAt: Date, nextRunAt: Date) {
     this.id = id;
     this.checklistId = checklistId;
     this.cron = cron;
+    this.lastRanAt = lastRanAt;
+    this.nextRunAt = nextRunAt;
+  }
+
+  public toJSON() {
+    return {
+      checklistId: this.checklistId,
+      cron: this.cron,
+      id: this.id,
+    };
   }
 }
 

@@ -128,7 +128,7 @@ describe("Checklists", () => {
       .expect("Content-Type", /json/)
       .expect(201);
     const checklists = await app.checklistService.findAll(apiKey.id);
-    assert.deepEqual(response.body, { data: { checklist: checklists[0] } });
+    assert.deepEqual(response.body, { data: { checklist: checklists[0].toJSON() } });
   });
 
   it("Create (POST /v1/checklists) - Bad Request", async () => {
@@ -153,7 +153,7 @@ describe("Checklists", () => {
       .send({ workerOrigin: checklist.workerOrigin })
       .expect("Content-Type", /json/)
       .expect(200);
-    assert.deepEqual(response.body, { data: { checklist } });
+    assert.deepEqual(response.body, { data: { checklist: checklist.toJSON() } });
   });
 
   it("Update (PUT /v1/checklists/<id>) - Bad Request", async () => {
@@ -414,7 +414,8 @@ describe("Schedules", () => {
 
   it("List (GET /v1/schedules) - Multiple items", async () => {
     const result = await app.database.query(
-      `insert into schedules (checklist_id, cron) values ($1, '0 */15 * * * *'), ($1, '0 * 1 * * *') returning *`,
+      `insert into schedules (checklist_id, cron, last_ran_at)
+        values ($1, '0 */15 * * * *', now()), ($1, '0 * 1 * * *', now()) returning *`,
       [checklistId],
     );
     const schedules = result.rows.map((r: { id: number; cron: string }) => ({
@@ -441,7 +442,7 @@ describe("Schedules", () => {
       .expect("Content-Type", /json/)
       .expect(201);
     const schedules = await app.scheduleService.findAll(apiKey.id);
-    assert.deepEqual(response.body, { data: { schedule: schedules[0] } });
+    assert.deepEqual(response.body, { data: { schedule: schedules[0].toJSON() } });
   });
 
   it("Create (POST /v1/schedules) - Bad Request", async () => {
@@ -477,7 +478,7 @@ describe("Schedules", () => {
       .send({ cron: schedule.cron })
       .expect("Content-Type", /json/)
       .expect(200);
-    assert.deepEqual(response.body, { data: { schedule } });
+    assert.deepEqual(response.body, { data: { schedule: schedule.toJSON() } });
   });
 
   it("Update (PUT /v1/schedules/<id>) - Bad Request", async () => {
