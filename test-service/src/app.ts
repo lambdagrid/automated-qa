@@ -70,6 +70,8 @@ export class Application {
     r.put("/todos/:id", authenticate, handleTodosUpdate.bind(null, this));
     r.delete("/todos/:id", authenticate, handleTodosDelete.bind(null, this));
 
+    r.post("/events", handleEvents.bind(null, this));
+
     r.use(handleNotFound.bind(null, this));
   }
 
@@ -317,6 +319,13 @@ async function handleTodosDelete(app: Application, req: express.Request, res: ex
   }
   await app.todoService.delete(todo.id);
   res.status(200).json({ message: "Successfully deleted." });
+}
+
+// Test endpoint for Webhooks. Simply logs request body to stdout.
+function handleEvents(app: Application, req: express.Request, res: express.Response) {
+  // tslint:disable-next-line:no-console
+  console.log(req.body);
+  res.status(200).json({});
 }
 
 function handleNotFound(app: Application, req: express.Request, res: express.Response) {

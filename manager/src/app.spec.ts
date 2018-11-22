@@ -1,6 +1,7 @@
 import * as assert from "assert";
 import * as supertest from "supertest";
-import app, { ApiKey, Application } from "./app";
+import app, { Application } from "./app";
+import { ApiKey, WebhookEventType } from "./entities";
 
 // tslint:disable:max-line-length
 
@@ -12,7 +13,7 @@ function authorizationHeaderForKey(key: string) {
 
 before(async () => {
   await app.setup();
-  await app.database.query(`truncate api_keys, checklists, flows, snapshots`);
+  await app.database.query(`truncate api_keys, checklists, flows, snapshots, schedules, webhooks`);
 });
 
 describe("App", () => {
@@ -86,7 +87,7 @@ describe("Checklists", () => {
   });
 
   beforeEach(async () => {
-    await app.database.query(`truncate checklists, flows, snapshots`);
+    await app.database.query(`truncate checklists, flows, snapshots, schedules`);
   });
 
   it("List (GET /v1/checklists) - No Checklist", async () => {
@@ -127,7 +128,7 @@ describe("Checklists", () => {
       .expect("Content-Type", /json/)
       .expect(201);
     const checklists = await app.checklistService.findAll(apiKey.id);
-    assert.deepEqual(response.body, { data: { checklist: checklists[0] } });
+    assert.deepEqual(response.body, { data: { checklist: checklists[0].toJSON() } });
   });
 
   it("Create (POST /v1/checklists) - Bad Request", async () => {
@@ -152,7 +153,7 @@ describe("Checklists", () => {
       .send({ workerOrigin: checklist.workerOrigin })
       .expect("Content-Type", /json/)
       .expect(200);
-    assert.deepEqual(response.body, { data: { checklist } });
+    assert.deepEqual(response.body, { data: { checklist: checklist.toJSON() } });
   });
 
   it("Update (PUT /v1/checklists/<id>) - Bad Request", async () => {
@@ -352,7 +353,7 @@ describe("Snapshots", () => {
   });
 
   beforeEach(async () => {
-    await app.database.query(`truncate checklists, flows, snapshots`);
+    await app.database.query(`truncate checklists, flows, snapshots, schedules`);
   });
 
   it("Update (POST /v1/checklists/<id>/snapshots)", async () => {
@@ -381,5 +382,292 @@ describe("Snapshots", () => {
 
     const snapshots = await app.snapshotService.findAllByFlow(flow.id);
     assert.deepEqual(snapshots.map((s) => s.value), ["!", "@"]);
+  });
+});
+
+describe("Schedules", () => {
+  let apiKey: ApiKey = null;
+  let checklistId: number = null;
+
+  before(async () => {
+    apiKey = await app.apiKeyService.create();
+    const result = await app.database.query(
+      `insert into checklists (api_key_id, worker_origin) values ($1, 'http://1') returning *`,
+      [apiKey.id],
+    );
+    checklistId = result.rows[0].id;
+  });
+
+  beforeEach(async () => {
+    await app.database.query(`truncate schedules`);
+  });
+
+  it("List (GET /v1/schedules) - No item", async () => {
+    const response = await supertest(app.httpServer)
+      .get("/v1/schedules")
+      .set("Authorization", authorizationHeaderForKey(apiKey.key))
+      .set("Accept", "application/json")
+      .expect("Content-Type", /json/)
+      .expect(200);
+    assert.deepEqual(response.body, { data: { schedules: [] } });
+  });
+
+  it("List (GET /v1/schedules) - Multiple items", async () => {
+    const result = await app.database.query(
+      `insert into schedules (checklist_id, cron, last_ran_at)
+        values ($1, '0 */15 * * * *', now()), ($1, '0 * 1 * * *', now()) returning *`,
+      [checklistId],
+    );
+    const schedules = result.rows.map((r: { id: number; cron: string }) => ({
+      checklistId,
+      cron: r.cron,
+      id: r.id,
+    }));
+
+    const response = await supertest(app.httpServer)
+      .get("/v1/schedules")
+      .set("Authorization", authorizationHeaderForKey(apiKey.key))
+      .set("Accept", "application/json")
+      .expect("Content-Type", /json/)
+      .expect(200);
+    assert.deepEqual(response.body, { data: { schedules } });
+  });
+
+  it("Create (POST /v1/schedules)", async () => {
+    const response = await supertest(app.httpServer)
+      .post("/v1/schedules")
+      .set("Authorization", authorizationHeaderForKey(apiKey.key))
+      .set("Accept", "application/json")
+      .send({ checklistId, cron: "* * * * * *" })
+      .expect("Content-Type", /json/)
+      .expect(201);
+    const schedules = await app.scheduleService.findAll(apiKey.id);
+    assert.deepEqual(response.body, { data: { schedule: schedules[0].toJSON() } });
+  });
+
+  it("Create (POST /v1/schedules) - Bad Request", async () => {
+    const response = await supertest(app.httpServer)
+      .post("/v1/schedules")
+      .set("Authorization", authorizationHeaderForKey(apiKey.key))
+      .set("Accept", "application/json")
+      .send({ cron: 0 })
+      .expect("Content-Type", /json/)
+      .expect(400);
+    assert.deepEqual(response.body.error, Application.Errors.BadRequest);
+  });
+
+  it("Create (POST /v1/schedules) - Not our checklist", async () => {
+    const response = await supertest(app.httpServer)
+      .post("/v1/schedules")
+      .set("Authorization", authorizationHeaderForKey(apiKey.key))
+      .set("Accept", "application/json")
+      .send({ checklistId: 0, cron: "* * * * * *" })
+      .expect("Content-Type", /json/)
+      .expect(404);
+    assert.deepEqual(response.body.error, Application.Errors.NotFound);
+  });
+
+  it("Update (PUT /v1/schedules/<id>)", async () => {
+    const schedule = await app.scheduleService.create(checklistId, "0 30 * * * *");
+    schedule.cron = "0 0 * * * *";
+
+    const response = await supertest(app.httpServer)
+      .put("/v1/schedules/" + String(schedule.id))
+      .set("Authorization", authorizationHeaderForKey(apiKey.key))
+      .set("Accept", "application/json")
+      .send({ cron: schedule.cron })
+      .expect("Content-Type", /json/)
+      .expect(200);
+    assert.deepEqual(response.body, { data: { schedule: schedule.toJSON() } });
+  });
+
+  it("Update (PUT /v1/schedules/<id>) - Bad Request", async () => {
+    const schedule = await app.scheduleService.create(checklistId, "* * * * * *");
+
+    const response = await supertest(app.httpServer)
+      .put("/v1/schedules/" + String(schedule.id))
+      .set("Authorization", authorizationHeaderForKey(apiKey.key))
+      .set("Accept", "application/json")
+      .send({ cron: 0 })
+      .expect("Content-Type", /json/)
+      .expect(400);
+    assert.deepEqual(response.body.error, Application.Errors.BadRequest);
+  });
+
+  it("Update (PUT /v1/schedules/<id>) - Not Found", async () => {
+    const response = await supertest(app.httpServer)
+      .put("/v1/schedules/1")
+      .set("Authorization", authorizationHeaderForKey(apiKey.key))
+      .set("Accept", "application/json")
+      .send({ cron: "* * * * * *" })
+      .expect("Content-Type", /json/)
+      .expect(404);
+    assert.deepEqual(response.body.error, Application.Errors.NotFound);
+  });
+
+  it("Delete (DELETE /v1/schedules/<id>)", async () => {
+    const schedule = await app.scheduleService.create(checklistId, "* * * * * *");
+
+    const response = await supertest(app.httpServer)
+      .delete("/v1/schedules/" + String(schedule.id))
+      .set("Authorization", authorizationHeaderForKey(apiKey.key))
+      .set("Accept", "application/json")
+      .expect("Content-Type", /json/)
+      .expect(200);
+    assert.deepEqual(response.body, { message: "Successfully deleted." });
+
+    const schedules = await app.scheduleService.findAll(apiKey.id);
+    assert(schedules.length === 0);
+  });
+
+  it("Delete (DELETE /v1/schedules/<id>) - Not Found", async () => {
+    const response = await supertest(app.httpServer)
+      .delete("/v1/schedules/1")
+      .set("Authorization", authorizationHeaderForKey(apiKey.key))
+      .set("Accept", "application/json")
+      .expect("Content-Type", /json/)
+      .expect(404);
+    assert.deepEqual(response.body.error, Application.Errors.NotFound);
+  });
+});
+
+describe("Webhooks", () => {
+  let apiKey: ApiKey = null;
+
+  before(async () => {
+    apiKey = await app.apiKeyService.create();
+  });
+
+  beforeEach(async () => {
+    await app.database.query(`truncate webhooks`);
+  });
+
+  it("List (GET /v1/webhooks) - No item", async () => {
+    const response = await supertest(app.httpServer)
+      .get("/v1/webhooks")
+      .set("Authorization", authorizationHeaderForKey(apiKey.key))
+      .set("Accept", "application/json")
+      .expect("Content-Type", /json/)
+      .expect(200);
+    assert.deepEqual(response.body, { data: { webhooks: [] } });
+  });
+
+  it("List (GET /v1/webhooks) - Multiple items", async () => {
+    const result = await app.database.query(
+      `insert into webhooks (api_key_id, event_type, url)
+        values ($1, 'start', 'http://1'), ($1, 'end', 'http://2') returning *`,
+      [apiKey.id],
+    );
+    const webhooks = result.rows.map((r: { id: number; event_type: string, url: string }) => ({
+      eventType: r.event_type,
+      id: r.id,
+      url: r.url,
+    }));
+
+    const response = await supertest(app.httpServer)
+      .get("/v1/webhooks")
+      .set("Authorization", authorizationHeaderForKey(apiKey.key))
+      .set("Accept", "application/json")
+      .expect("Content-Type", /json/)
+      .expect(200);
+    assert.deepEqual(response.body, { data: { webhooks } });
+  });
+
+  it("Create (POST /v1/webhooks)", async () => {
+    const response = await supertest(app.httpServer)
+      .post("/v1/webhooks")
+      .set("Authorization", authorizationHeaderForKey(apiKey.key))
+      .set("Accept", "application/json")
+      .send({ eventType: WebhookEventType.ScheduledChecklistStart, url: "http://1" })
+      .expect("Content-Type", /json/)
+      .expect(201);
+    const webhooks = await app.webhookService.findAll(apiKey.id);
+    assert.deepEqual(response.body, { data: { webhook: webhooks[0] } });
+  });
+
+  it("Create (POST /v1/webhooks) - Bad Request", async () => {
+    const response = await supertest(app.httpServer)
+      .post("/v1/webhooks")
+      .set("Authorization", authorizationHeaderForKey(apiKey.key))
+      .set("Accept", "application/json")
+      .send({ url: "", eventType: "something else" })
+      .expect("Content-Type", /json/)
+      .expect(400);
+    assert.deepEqual(response.body.error, Application.Errors.BadRequest);
+  });
+
+  it("Update (PUT /v1/webhooks/<id>)", async () => {
+    const webhook = await app.webhookService.create(
+      apiKey.id,
+      WebhookEventType.ScheduledChecklistStart,
+      "http://localhost:3001",
+    );
+    webhook.url = "http://prod";
+
+    const response = await supertest(app.httpServer)
+      .put("/v1/webhooks/" + String(webhook.id))
+      .set("Authorization", authorizationHeaderForKey(apiKey.key))
+      .set("Accept", "application/json")
+      .send({ url: webhook.url })
+      .expect("Content-Type", /json/)
+      .expect(200);
+    assert.deepEqual(response.body, { data: { webhook } });
+  });
+
+  it("Update (PUT /v1/webhooks/<id>) - Bad Request", async () => {
+    const webhook = await app.webhookService.create(
+      apiKey.id,
+      WebhookEventType.ScheduledChecklistStart,
+      "http://localhost:3001",
+    );
+
+    const response = await supertest(app.httpServer)
+      .put("/v1/webhooks/" + String(webhook.id))
+      .set("Authorization", authorizationHeaderForKey(apiKey.key))
+      .set("Accept", "application/json")
+      .send({ url: 0 })
+      .expect("Content-Type", /json/)
+      .expect(400);
+    assert.deepEqual(response.body.error, Application.Errors.BadRequest);
+  });
+
+  it("Update (PUT /v1/webhooks/<id>) - Not Found", async () => {
+    const response = await supertest(app.httpServer)
+      .put("/v1/webhooks/1")
+      .set("Authorization", authorizationHeaderForKey(apiKey.key))
+      .set("Accept", "application/json")
+      .send({ cron: "* * * * * *" })
+      .expect("Content-Type", /json/)
+      .expect(404);
+    assert.deepEqual(response.body.error, Application.Errors.NotFound);
+  });
+
+  it("Delete (DELETE /v1/webhooks/<id>)", async () => {
+    const webhook = await app.webhookService.create(
+      apiKey.id,
+      WebhookEventType.ScheduledChecklistStart,
+      "http://localhost:3001",
+    );
+
+    const response = await supertest(app.httpServer)
+      .delete("/v1/webhooks/" + String(webhook.id))
+      .set("Authorization", authorizationHeaderForKey(apiKey.key))
+      .set("Accept", "application/json")
+      .expect("Content-Type", /json/)
+      .expect(200);
+    assert.deepEqual(response.body, { message: "Successfully deleted." });
+
+    const webhooks = await app.webhookService.findAll(apiKey.id);
+    assert(webhooks.length === 0);
+  });
+
+  it("Delete (DELETE /v1/webhooks/<id>) - Not Found", async () => {
+    const response = await supertest(app.httpServer)
+      .delete("/v1/webhooks/1")
+      .set("Authorization", authorizationHeaderForKey(apiKey.key))
+      .set("Accept", "application/json")
+      .expect("Content-Type", /json/)
+      .expect(404);
+    assert.deepEqual(response.body.error, Application.Errors.NotFound);
   });
 });

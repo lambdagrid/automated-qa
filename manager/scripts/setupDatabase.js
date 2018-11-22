@@ -30,7 +30,22 @@ async function setupDatabase() {
     value text not null,
     unique (flow_id, name)
   )`);
-  console.log("Database tables api_keys, checklists, flows and snapshots created.");
+
+  await client.query(`create table schedules (
+    id serial primary key,
+    checklist_id integer references checklists (id),
+    cron text not null,
+    last_ran_at timestamptz not null,
+    next_run_at timestamptz
+  )`);
+
+  await client.query(`create table webhooks (
+    id serial primary key,
+    api_key_id integer references api_keys (id),
+    event_type text not null,
+    url text not null
+  )`);
+  console.log("Database tables api_keys, checklists, flows, snapshots, schedules and webhooks created.");
   client.end();
 }
 setupDatabase().catch((err) => {

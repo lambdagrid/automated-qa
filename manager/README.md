@@ -18,6 +18,14 @@ method|path
 `DELETE`|`/checklists/<id>`
 `POST`|`/checklists/<id>/run`
 `POST`|`/checklists/<id>/snapshots`
+`GET`|`/schedules`
+`POST`|`/schedules`
+`PUT`|`/schedules/<id>`
+`DELETE`|`/schedules/<id>`
+`GET`|`/webhooks`
+`POST`|`/webhooks`
+`PUT`|`/webhooks/<id>`
+`DELETE`|`/webhooks/<id>`
 
 ### Deploying
 

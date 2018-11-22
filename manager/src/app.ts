@@ -1,10 +1,32 @@
 import * as Ajv from "ajv";
 import * as bodyParser from "body-parser";
-import * as crypto from "crypto";
+import { CronJob } from "cron";
 import * as express from "express";
 import * as pg from "pg";
-import * as request from "request-promise-native";
+
+import {
+  ApiKey,
+  Assertion,
+  Checklist,
+  Flow,
+  IFlowRunSummary,
+  Schedule,
+  Snapshot,
+  Webhook,
+  WebhookEventType,
+  WebhookEventTypes,
+} from "./entities";
 import { V1SnapshotsUpdatePayload } from "./schemas";
+import {
+  ApiKeyService,
+  ChecklistService,
+  FlowService,
+  ScheduleService,
+  SnapshotService,
+  WebhookService,
+} from "./services";
+
+const noop = (): void => { /* do nothing */ };
 
 declare global {
   namespace Express {
@@ -43,12 +65,16 @@ export class Application {
   public checklistService: ChecklistService;
   public flowService: FlowService;
   public snapshotService: SnapshotService;
+  public scheduleService: ScheduleService;
+  public webhookService: WebhookService;
 
   constructor() {
     this.apiKeyService = new ApiKeyService(this);
     this.checklistService = new ChecklistService(this);
     this.flowService = new FlowService(this);
     this.snapshotService = new SnapshotService(this);
+    this.scheduleService = new ScheduleService(this);
+    this.webhookService = new WebhookService(this);
   }
 
   public setupConfig() {
@@ -73,12 +99,23 @@ export class Application {
 
     const authenticate = middlewareRequireApiKey.bind(null, this);
     r.delete("/api-keys", authenticate, handleApiKeysDelete.bind(null, this));
+
     r.get("/v1/checklists", authenticate, handleChecklistsList.bind(null, this));
     r.post("/v1/checklists", authenticate, handleChecklistsCreate.bind(null, this));
     r.put("/v1/checklists/:id", authenticate, handleChecklistsUpdate.bind(null, this));
     r.delete("/v1/checklists/:id", authenticate, handleChecklistsDelete.bind(null, this));
     r.post("/v1/checklists/:id/run", authenticate, handleChecklistsRun.bind(null, this));
     r.post("/v1/checklists/:id/snapshots", authenticate, handleSnapshotsUpdate.bind(null, this));
+
+    r.get("/v1/schedules", authenticate, handleSchedulesList.bind(null, this));
+    r.post("/v1/schedules", authenticate, handleSchedulesCreate.bind(null, this));
+    r.put("/v1/schedules/:id", authenticate, handleSchedulesUpdate.bind(null, this));
+    r.delete("/v1/schedules/:id", authenticate, handleSchedulesDelete.bind(null, this));
+
+    r.get("/v1/webhooks", authenticate, handleWebhooksList.bind(null, this));
+    r.post("/v1/webhooks", authenticate, handleWebhooksCreate.bind(null, this));
+    r.put("/v1/webhooks/:id", authenticate, handleWebhooksUpdate.bind(null, this));
+    r.delete("/v1/webhooks/:id", authenticate, handleWebhooksDelete.bind(null, this));
 
     r.use(handleNotFound.bind(null, this));
   }
@@ -98,6 +135,8 @@ export class Application {
   public async start() {
     await this.setup();
 
+    this.scheduleService.startCron();
+
     const port = this.config.get("port");
     this.httpServer.listen(port, (err: Error) => {
       if (err) {
@@ -107,299 +146,6 @@ export class Application {
       // tslint:disable-next-line:no-console
       console.log(`server is listening on ${port}`);
     });
-  }
-}
-
-export class ApiKey {
-  public id: number;
-  public key: string;
-
-  constructor(id: number, key: string) {
-    this.id = id;
-    this.key = key;
-  }
-}
-
-export class Checklist {
-  public id: number;
-  public apiKeyId: number;
-  public workerOrigin: string;
-
-  constructor(id: number, workerOrigin: string) {
-    this.id = id;
-    this.workerOrigin = workerOrigin;
-  }
-}
-
-interface IFlowRunSummary {
-  match: number;
-  miss: number;
-  new: number;
-}
-
-export class Flow {
-  public id: number;
-  public name: string;
-  public assertions: Assertion[];
-  public summary: IFlowRunSummary;
-
-  constructor(id: number, name: string) {
-    this.id = id;
-    this.name = name;
-    this.assertions = [];
-    this.summary = { match: 0, miss: 0, new: 0 } as IFlowRunSummary;
-  }
-}
-
-export class Assertion {
-  public id: number;
-  public name: string;
-  public snapshot: string;
-  public expectedSnapshot: string;
-  public result: string;
-
-  constructor(id: number, name: string, snapshot: string, expectedSnapshot: string, result: string) {
-    this.id = id;
-    this.name = name;
-    this.snapshot = snapshot;
-    this.expectedSnapshot = expectedSnapshot;
-    this.result = result;
-  }
-
-  // Stips the `[2]` from the end of the snapshot name (like `1 + 1 is equal to 2 [2]`
-  public nameWithoutNumber() {
-    const parts = this.name.split("[");
-    if (parts.length > 1) {
-      return parts.slice(0, -1).join("[");
-    }
-    return this.name;
-  }
-}
-
-export class Snapshot {
-  public id: number;
-  public name: string;
-  public value: string;
-
-  constructor(id: number, name: string, value: string) {
-    this.id = id;
-    this.name = name;
-    this.value = value;
-  }
-
-  public toAssertion(): Assertion {
-    return new Assertion(this.id, this.name, this.value, "", "");
-  }
-}
-
-class ApiKeyService {
-  public app: Application;
-
-  constructor(app: Application) {
-    this.app = app;
-  }
-
-  public entityFromRow(row: { id: number; key: string }): ApiKey {
-    return new ApiKey(row.id, row.key);
-  }
-
-  public async create() {
-    const time = new Date().getTime().toString();
-    const key = crypto
-      .createHash("md5")
-      .update(time)
-      .digest("hex");
-    const result = await this.app.database.query(`insert into api_keys (key) values ($1) returning *`, [key]);
-    return this.entityFromRow(result.rows[0]);
-  }
-
-  public async delete(id: number) {
-    await this.app.database.query(`delete from api_keys where id = $1`, [id]);
-  }
-
-  public async findByKey(key: string): Promise<ApiKey> {
-    const result = await this.app.database.query(`select * from api_keys where key = $1`, [key]);
-    if (result.rows.length === 0) {
-      return null;
-    }
-    return this.entityFromRow(result.rows[0]);
-  }
-}
-
-class ChecklistService {
-  public app: Application;
-
-  constructor(app: Application) {
-    this.app = app;
-  }
-
-  public entityFromRow(row: { id: number; worker_origin: string }): Checklist {
-    return new Checklist(row.id, row.worker_origin);
-  }
-
-  public async create(apiKeyId: number, workerOrigin: string): Promise<Checklist> {
-    const result = await this.app.database.query(
-      `insert into checklists (api_key_id, worker_origin) values ($1, $2) returning *`,
-      [apiKeyId, workerOrigin],
-    );
-    return this.entityFromRow(result.rows[0]);
-  }
-
-  public async update(checklist: Checklist) {
-    await this.app.database.query(`update checklists set worker_origin = $2 where id = $1`, [
-      checklist.id,
-      checklist.workerOrigin,
-    ]);
-  }
-
-  public async delete(id: number) {
-    await this.app.database.query(`delete from snapshots where flow_id in
-      (select id from flows where checklist_id = $1)`, [id]);
-    await this.app.database.query(`delete from flows where checklist_id = $1`, [id]);
-    await this.app.database.query(`delete from checklists where id = $1`, [id]);
-  }
-
-  public async deleteByApiKeyId(id: number) {
-    await this.app.database.query(`delete from snapshots where flow_id in
-      (select id from flows where checklist_id in
-        (select id from checklists where api_key_id = $1))`, [id]);
-    await this.app.database.query(`delete from flows where checklist_id in
-      (select id from checklists where api_key_id = $1)`, [id]);
-    await this.app.database.query(`delete from checklists where api_key_id = $1`, [id]);
-  }
-
-  public async find(id: number, apiKeyId: number): Promise<Checklist> {
-    const result = await this.app.database.query(`select * from checklists where id = $1 and api_key_id = $2`, [
-      id,
-      apiKeyId,
-    ]);
-    if (result.rows.length === 0) {
-      return null;
-    }
-    return this.entityFromRow(result.rows[0]);
-  }
-
-  public async findAll(apiKeyId: number): Promise<Checklist[]> {
-    const query = `select * from checklists where api_key_id = $1 order by id`;
-    const result = await this.app.database.query(query, [apiKeyId]);
-    return result.rows.map(this.entityFromRow);
-  }
-
-  public async run(checklist: Checklist): Promise<Flow[]> {
-    const flows = await this.app.flowService.findAllByChecklist(checklist.id);
-    for (const flow of flows) {
-      const snapshots = await this.app.snapshotService.findAllByFlow(flow.id);
-      flow.assertions = snapshots.map((s) => s.toAssertion());
-    }
-    const result = await request.post({
-      body: {
-        flows: flows.map((f) => ({
-          assertions: f.assertions.map((a) => ({
-            name: a.nameWithoutNumber(),
-            snapshot: a.snapshot,
-          })),
-          name: f.name,
-        })),
-      },
-      json: true,
-      uri: checklist.workerOrigin + "/v0/run",
-    });
-
-    for (const flow of result.flows) {
-      flow.summary = { match: 0, miss: 0, new: 0 } as IFlowRunSummary;
-
-      let databaseFlow = flows.find((f) => f.name === flow.name);
-      if (!databaseFlow) {
-        databaseFlow = await this.app.flowService.create(checklist.id, flow.name);
-      }
-
-      const assertionsSeen = new Map<string, number>();
-      for (const assertion of flow.assertions) {
-        // Compute assertion name (accounting for duplicates)
-        let assertionName = assertion.name;
-        if (assertionsSeen.get(assertion.name) > 0) {
-          assertionName += "[" + String(assertionsSeen.get(assertion.name) + 1) + "]";
-        }
-        assertionsSeen.set(assertion.Name, assertionsSeen.get(assertion.Name) + 1);
-
-        // Create missing / new snapshots
-        let databaseAssertion = databaseFlow.assertions.find((a) => a.name === assertionName);
-        if (!databaseAssertion) {
-          const snapshot = await this.app.snapshotService.create(
-            databaseFlow.id, assertionName, assertion.snapshot,
-          );
-          databaseAssertion = snapshot.toAssertion();
-        }
-
-        // Augment worker response with saved snapshot data & summary
-        assertion.name = assertionName;
-        if (assertion.result === "MISS") {
-          assertion.expectedSnapshot = databaseAssertion.snapshot;
-        }
-        flow.summary[assertion.result.toLowerCase()]++;
-      }
-    }
-
-    return result.flows as Flow[];
-  }
-}
-
-class FlowService {
-  public app: Application;
-
-  constructor(app: Application) {
-    this.app = app;
-  }
-
-  public entityFromRow(row: { id: number; name: string }): Flow {
-    return new Flow(row.id, row.name);
-  }
-
-  public async create(checklistId: number, name: string): Promise<Flow> {
-    const result = await this.app.database.query(
-      `insert into flows (checklist_id, name) values ($1, $2) returning *`,
-      [checklistId, name],
-    );
-    return this.entityFromRow(result.rows[0]);
-  }
-
-  public async findAllByChecklist(checklistId: number): Promise<Flow[]> {
-    const query = `select * from flows where checklist_id = $1 order by id`;
-    const result = await this.app.database.query(query, [checklistId]);
-    return result.rows.map(this.entityFromRow);
-  }
-}
-
-class SnapshotService {
-  public app: Application;
-
-  constructor(app: Application) {
-    this.app = app;
-  }
-
-  public entityFromRow(row: { id: number; name: string, value: string }): Snapshot {
-    return new Snapshot(row.id, row.name, row.value);
-  }
-
-  public async create(flowId: number, name: string, value: string): Promise<Snapshot> {
-    const result = await this.app.database.query(
-      `insert into snapshots (flow_id, name, value) values ($1, $2, $3) returning *`,
-      [flowId, name, value],
-    );
-    return this.entityFromRow(result.rows[0]);
-  }
-
-  public async update(checklistId: number, flowName: string, name: string, value: string): Promise<void> {
-    const query = `insert into snapshots (flow_id, name, value)
-      values ((select id from flows where checklist_id = $1 and name = $2), $3, $4)
-      on conflict (flow_id, name) do nothing`;
-    await this.app.database.query(query, [checklistId, flowName, name, value]);
-  }
-
-  public async findAllByFlow(flowId: number): Promise<Snapshot[]> {
-    const query = `select * from snapshots where flow_id = $1 order by id`;
-    const result = await this.app.database.query(query, [flowId]);
-    return result.rows.map(this.entityFromRow);
   }
 }
 
@@ -476,7 +222,7 @@ async function handleApiKeysDelete(app: Application, req: express.Request, res: 
 async function handleChecklistsList(app: Application, req: express.Request, res: express.Response) {
   const checklists = await app.checklistService.findAll(req.currentApiKey.id);
   res.status(200).json({
-    data: { checklists },
+    data: { checklists: checklists.map((c) => c.toJSON()) },
   });
 }
 
@@ -486,7 +232,7 @@ async function handleChecklistsCreate(app: Application, req: express.Request, re
   }
   const checklist = await app.checklistService.create(req.currentApiKey.id, req.body.workerOrigin);
   res.status(201).json({
-    data: { checklist },
+    data: { checklist: checklist.toJSON() },
   });
 }
 
@@ -506,7 +252,7 @@ async function handleChecklistsUpdate(app: Application, req: express.Request, re
   await app.checklistService.update(checklist);
 
   res.status(200).json({
-    data: { checklist },
+    data: { checklist: checklist.toJSON() },
   });
 }
 
@@ -558,6 +304,121 @@ async function handleSnapshotsUpdate(app: Application, req: express.Request, res
     }
   }
   res.status(201).json({ data: { flows: req.body.flows } });
+}
+
+async function handleSchedulesList(app: Application, req: express.Request, res: express.Response) {
+  const schedules = await app.scheduleService.findAll(req.currentApiKey.id);
+  res.status(200).json({ data: { schedules: schedules.map((c) => c.toJSON()) } });
+}
+
+async function handleSchedulesCreate(app: Application, req: express.Request, res: express.Response) {
+  if (!req.body || typeof req.body.cron !== "string" || typeof req.body.checklistId !== "number") {
+    return res.status(400).json({ error: Application.Errors.BadRequest });
+  }
+  // Verify the provided cron spec is valid
+  let job: CronJob = null;
+  try {
+    job = new CronJob(req.body.cron, noop);
+  } catch (e) {
+    return res.status(400).json({ error: Application.Errors.BadRequest });
+  }
+  // Verify the current api key owns the target checklistId
+  const checklist = await app.checklistService.find(req.body.checklistId, req.currentApiKey.id);
+  if (!checklist) {
+    return res.status(404).json({ error: Application.Errors.NotFound });
+  }
+
+  const schedule = await app.scheduleService.create(req.body.checklistId, req.body.cron, job.nextDates());
+  res.status(201).json({ data: { schedule: schedule.toJSON() } });
+}
+
+async function handleSchedulesUpdate(app: Application, req: express.Request, res: express.Response) {
+  if (!req.body || typeof req.body.cron !== "string") {
+    return res.status(400).json({ error: Application.Errors.BadRequest });
+  }
+
+  // Verify the provided cron spec is valid
+  let job: CronJob = null;
+  try {
+    job = new CronJob(req.body.cron, noop);
+  } catch (e) {
+    return res.status(400).json({ error: Application.Errors.BadRequest });
+  }
+  // Find requested schedule
+  const schedule = await app.scheduleService.find(req.params.id, req.currentApiKey.id);
+  if (!schedule) {
+    return res.status(404).json({ error: Application.Errors.NotFound });
+  }
+
+  // Update matching schedule fields and save changes to the database
+  schedule.cron = req.body.cron;
+  schedule.nextRunAt = job.nextDates();
+  await app.scheduleService.update(schedule);
+
+  res.status(200).json({ data: { schedule: schedule.toJSON() } });
+}
+
+async function handleSchedulesDelete(app: Application, req: express.Request, res: express.Response) {
+  // Find requested schedule
+  const schedule = await app.scheduleService.find(req.params.id, req.currentApiKey.id);
+  if (!schedule) {
+    return res.status(404).json({ error: Application.Errors.NotFound });
+  }
+  await app.scheduleService.delete(schedule.id);
+  res.status(200).json({ message: "Successfully deleted." });
+}
+
+async function handleWebhooksList(app: Application, req: express.Request, res: express.Response) {
+  const webhooks = await app.webhookService.findAll(req.currentApiKey.id);
+  res.status(200).json({ data: { webhooks } });
+}
+
+async function handleWebhooksCreate(app: Application, req: express.Request, res: express.Response) {
+  if (!req.body || typeof req.body.url !== "string" || WebhookEventTypes.indexOf(req.body.eventType) === -1) {
+    return res.status(400).json({ error: Application.Errors.BadRequest });
+  }
+
+  const webhook = await app.webhookService.create(req.currentApiKey.id, req.body.eventType, req.body.url);
+  res.status(201).json({ data: { webhook } });
+}
+
+async function handleWebhooksUpdate(app: Application, req: express.Request, res: express.Response) {
+  if (!req.body) {
+    return res.status(400).json({ error: Application.Errors.BadRequest });
+  }
+
+  // Find requested webhook
+  const webhook = await app.webhookService.find(req.params.id, req.currentApiKey.id);
+  if (!webhook) {
+    return res.status(404).json({ error: Application.Errors.NotFound });
+  }
+
+  // Update provided webhook fields and save changes to the database
+  if ("url" in req.body) {
+    if (typeof req.body.url !== "string") {
+      return res.status(400).json({ error: Application.Errors.BadRequest });
+    }
+    webhook.url = req.body.url;
+  }
+  if ("eventType" in req.body) {
+    if (WebhookEventTypes.indexOf(req.body.eventType) === -1) {
+      return res.status(400).json({ error: Application.Errors.BadRequest });
+    }
+    webhook.eventType = req.body.eventType;
+  }
+  await app.webhookService.update(webhook);
+
+  res.status(200).json({ data: { webhook } });
+}
+
+async function handleWebhooksDelete(app: Application, req: express.Request, res: express.Response) {
+  // Find requested webhook
+  const webhook = await app.webhookService.find(req.params.id, req.currentApiKey.id);
+  if (!webhook) {
+    return res.status(404).json({ error: Application.Errors.NotFound });
+  }
+  await app.webhookService.delete(webhook.id);
+  res.status(200).json({ message: "Successfully deleted." });
 }
 
 function handleNotFound(app: Application, req: express.Request, res: express.Response) {
