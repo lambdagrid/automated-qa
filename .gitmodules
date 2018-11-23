@@ -1,0 +1,3 @@
+[submodule "worker"]
+	path = worker
+	url = git@github.com:lambdagrid/automated-qa-worker.git
