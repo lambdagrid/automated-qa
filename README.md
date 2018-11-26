@@ -44,46 +44,6 @@ it's accessible (withing your own app, Heroky, Now.sh or some other hosting
 provider) then configure the Automated QA manager to run your checklist on
 a set schedule.
 
-### Running Tests
-
-A simple integration test suite can be found in the `test/` folder.
-
-To run it start by starting up the _dev_ server for the `test-service` and
-the automated QA "worker" server using:
-
-```
-$ cd worker
-$ npm run dev
-```
-
-and
-
-```
-$ cd test-service
-$ npm run dev
-```
-
-_(Make sure you've followed the instructions to setup the `test-service`'s
-database & dependencies beforehand)_
-
-**Testing**
-
-Now with both of those servers running on port `3000` and `3001` you should
-be able to run:
-
-```
-$ npm test
-```
-
-### Running Linters
-
-This project includes a `.prettierrc` file for your editor to use.
-
-This project also has a TSLint configured which you can have your editor run
-for you.
-
-If you wish to run the lint checks from the command line you can use: `npm run lint`.
-
 ### License
 
 GPL-3.0. See `LICENSE.txt` file.
