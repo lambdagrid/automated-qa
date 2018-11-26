@@ -51,7 +51,7 @@ describe("API Keys", () => {
 
   it("Delete (DELETE /api-keys)", async () => {
     await app.database.query(
-      `insert into checklists (api_key_id, worker_origin) values (` + apiKeyIdSubquery + `, 'http://1')`,
+      `insert into checklists (api_key_id, worker_url) values (` + apiKeyIdSubquery + `, 'http://1')`,
       [apiKey],
     );
 
@@ -102,12 +102,12 @@ describe("Checklists", () => {
 
   it("List (GET /v1/checklists) - Multiple Checklists", async () => {
     const result = await app.database.query(
-      `insert into checklists (api_key_id, worker_origin) values ($1, 'http://1'), ($1, 'http://2') returning *`,
+      `insert into checklists (api_key_id, worker_url) values ($1, 'http://1'), ($1, 'http://2') returning *`,
       [apiKey.id],
     );
-    const checklists = result.rows.map((r: { id: number; worker_origin: string }) => ({
+    const checklists = result.rows.map((r: { id: number; worker_url: string }) => ({
       id: r.id,
-      workerOrigin: r.worker_origin,
+      workerUrl: r.worker_url,
     }));
 
     const response = await supertest(app.httpServer)
@@ -124,7 +124,7 @@ describe("Checklists", () => {
       .post("/v1/checklists")
       .set("Authorization", authorizationHeaderForKey(apiKey.key))
       .set("Accept", "application/json")
-      .send({ workerOrigin: "http://acme.com" })
+      .send({ workerUrl: "http://acme.com" })
       .expect("Content-Type", /json/)
       .expect(201);
     const checklists = await app.checklistService.findAll(apiKey.id);
@@ -136,7 +136,7 @@ describe("Checklists", () => {
       .post("/v1/checklists")
       .set("Authorization", authorizationHeaderForKey(apiKey.key))
       .set("Accept", "application/json")
-      .send({ workerOrigin: 100 })
+      .send({ workerUrl: 100 })
       .expect("Content-Type", /json/)
       .expect(400);
     assert.deepEqual(response.body.error, Application.Errors.BadRequest);
@@ -144,13 +144,13 @@ describe("Checklists", () => {
 
   it("Update (PUT /v1/checklists/<id>)", async () => {
     const checklist = await app.checklistService.create(apiKey.id, "http://localhost:3000");
-    checklist.workerOrigin = "http://localhost:8888";
+    checklist.workerUrl = "http://localhost:8888";
 
     const response = await supertest(app.httpServer)
       .put("/v1/checklists/" + String(checklist.id))
       .set("Authorization", authorizationHeaderForKey(apiKey.key))
       .set("Accept", "application/json")
-      .send({ workerOrigin: checklist.workerOrigin })
+      .send({ workerUrl: checklist.workerUrl })
       .expect("Content-Type", /json/)
       .expect(200);
     assert.deepEqual(response.body, { data: { checklist: checklist.toJSON() } });
@@ -163,7 +163,7 @@ describe("Checklists", () => {
       .put("/v1/checklists/" + String(checklist.id))
       .set("Authorization", authorizationHeaderForKey(apiKey.key))
       .set("Accept", "application/json")
-      .send({ workerOrigin: 100 })
+      .send({ workerUrl: 100 })
       .expect("Content-Type", /json/)
       .expect(400);
     assert.deepEqual(response.body.error, Application.Errors.BadRequest);
@@ -174,7 +174,7 @@ describe("Checklists", () => {
       .put("/v1/checklists/1")
       .set("Authorization", authorizationHeaderForKey(apiKey.key))
       .set("Accept", "application/json")
-      .send({ workerOrigin: "http://acme.com" })
+      .send({ workerUrl: "http://acme.com" })
       .expect("Content-Type", /json/)
       .expect(404);
     assert.deepEqual(response.body.error, Application.Errors.NotFound);
@@ -189,7 +189,7 @@ describe("Checklists", () => {
       .put("/v1/checklists/" + String(checklist.id))
       .set("Authorization", authorizationHeaderForKey(apiKey.key))
       .set("Accept", "application/json")
-      .send({ workerOrigin: "http://acme.com" })
+      .send({ workerUrl: "http://acme.com" })
       .expect("Content-Type", /json/)
       .expect(404);
     assert.deepEqual(response.body.error, Application.Errors.NotFound);
@@ -239,7 +239,7 @@ describe("Checklists", () => {
   }
 
   it("Run (POST /v1/checklists/<id>/run) - All New", async () => {
-    const checklist = await app.checklistService.create(apiKey.id, "http://localhost:3000");
+    const checklist = await app.checklistService.create(apiKey.id, "http://localhost:3000/");
 
     const response = await callRun(checklist.id);
     assert.deepEqual(response.body, {
@@ -317,7 +317,7 @@ describe("Checklists", () => {
   });
 
   it("Run (POST /v1/checklists/<id>/run) - All Match", async () => {
-    const checklist = await app.checklistService.create(apiKey.id, "http://localhost:3000");
+    const checklist = await app.checklistService.create(apiKey.id, "http://localhost:3000/");
     await callRun(checklist.id);
     const response = await callRun(checklist.id);
     assert.deepEqual(response.body.data.flows[0].summary, {
@@ -392,7 +392,7 @@ describe("Schedules", () => {
   before(async () => {
     apiKey = await app.apiKeyService.create();
     const result = await app.database.query(
-      `insert into checklists (api_key_id, worker_origin) values ($1, 'http://1') returning *`,
+      `insert into checklists (api_key_id, worker_url) values ($1, 'http://1') returning *`,
       [apiKey.id],
     );
     checklistId = result.rows[0].id;

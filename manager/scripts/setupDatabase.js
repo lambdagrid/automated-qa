@@ -14,7 +14,7 @@ async function setupDatabase() {
   await client.query(`create table checklists (
     id serial primary key,
     api_key_id integer references api_keys (id),
-    worker_origin text not null
+    worker_url text not null
   )`);
 
   await client.query(`create table flows (

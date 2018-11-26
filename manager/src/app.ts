@@ -227,17 +227,17 @@ async function handleChecklistsList(app: Application, req: express.Request, res:
 }
 
 async function handleChecklistsCreate(app: Application, req: express.Request, res: express.Response) {
-  if (!req.body || typeof req.body.workerOrigin !== "string") {
+  if (!req.body || typeof req.body.workerUrl !== "string") {
     return res.status(400).json({ error: Application.Errors.BadRequest });
   }
-  const checklist = await app.checklistService.create(req.currentApiKey.id, req.body.workerOrigin);
+  const checklist = await app.checklistService.create(req.currentApiKey.id, req.body.workerUrl);
   res.status(201).json({
     data: { checklist: checklist.toJSON() },
   });
 }
 
 async function handleChecklistsUpdate(app: Application, req: express.Request, res: express.Response) {
-  if (!req.body || typeof req.body.workerOrigin !== "string") {
+  if (!req.body || typeof req.body.workerUrl !== "string") {
     return res.status(400).json({ error: Application.Errors.BadRequest });
   }
 
@@ -248,7 +248,7 @@ async function handleChecklistsUpdate(app: Application, req: express.Request, re
   }
 
   // Update matching checklist fields and save changes to the database
-  checklist.workerOrigin = req.body.workerOrigin;
+  checklist.workerUrl = req.body.workerUrl;
   await app.checklistService.update(checklist);
 
   res.status(200).json({
