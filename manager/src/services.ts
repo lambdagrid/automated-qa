@@ -290,8 +290,8 @@ export class ScheduleService {
 
   public startCron() {
     setInterval(() => {
-      this.scheduleSchedules().catch((e) => log("scheduleSchedules:", e));
-      this.runPendingSchedules().catch((e) => log("runPendingSchedules:", e));
+      this.scheduleChecklists().catch((e) => log("scheduleChecklists:", e));
+      this.runPendingChecklists().catch((e) => log("runPendingChecklists:", e));
     }, 1000);
   }
 
@@ -300,7 +300,7 @@ export class ScheduleService {
   // same moment.
   // This means that we need to periodically go through schedules that just ran
   // and re-compute a next_run_at date for them.
-  private async scheduleSchedules() {
+  private async scheduleChecklists() {
     // Here we add a delay of 1 second before allowing a schedule to get
     // it's next_run_at schedule computed to avoid the case of a cron job
     // that would run multiple times in the space of a second
@@ -316,7 +316,7 @@ export class ScheduleService {
     }
   }
 
-  private async runPendingSchedules() {
+  private async runPendingChecklists() {
     const result = await this.app.database.query(`update schedules
       set last_ran_at = now(), next_run_at = null
       where now() >= next_run_at returning *`);
