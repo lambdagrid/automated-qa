@@ -229,7 +229,7 @@ export class SnapshotService {
   public async update(checklistId: number, flowName: string, name: string, value: string): Promise<void> {
     const query = `insert into snapshots (flow_id, name, value)
       values ((select id from flows where checklist_id = $1 and name = $2), $3, $4)
-      on conflict (flow_id, name) do nothing`;
+      on conflict (flow_id, name) do update set value = EXCLUDED.value`;
     await this.app.database.query(query, [checklistId, flowName, name, value]);
   }
 

@@ -381,7 +381,7 @@ describe("Snapshots", () => {
     assert.deepEqual(response.body, { data: { flows } });
 
     const snapshots = await app.snapshotService.findAllByFlow(flow.id);
-    assert.deepEqual(snapshots.map((s) => s.value), ["!", "@"]);
+    assert.deepEqual(snapshots.map((s) => s.value), ["!", "###"]);
   });
 });
 
