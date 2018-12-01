@@ -120,6 +120,31 @@ for you.
 
 If you wish to run the lint checks from the command line you can use: `npm run lint`.
 
+### Checklist Scheduling: How it works
+
+One of the tasks the manager accomplishes is running checklists on a user
+provided "cron" schedule. In order to accomplish this it uses 3 self-explanatory
+fields on the checklist entity: `cron`, `last_ran_at`, `next_run_at`.
+
+Delving deeper in how this works in practice, at startup time, 2 methods of the
+`ScheduleService` are setup to be ran every second: `scheduleChecklists` and
+`runPendingChecklists`.
+
+**`runPendingChecklists`** will find any checklist that has a `next_run_at` in the
+past and "run" it now. It also atomically sets the `next_run_at` to "null" so
+that no other server/process picks up this checklist and tried to run it,
+avoiding dounble runs (that PostgreSQL column act's as out "lock").
+
+**`scheduleChecklists`** will look for any checklist with a "null" `next_run_at`
+<sup>1</sup>, compute what the `next_run_at` should be and save it for
+`runPendingChecklists` to use.
+
+_[1] Making sure the last run was at least 1 second in the past to avoid
+rescheduling a currently running task (cron's precision only goes to 1 second)_
+
+![scheduler diagram](./scheduler.jpg)
+
+
 ### License
 
 GPL-3.0. See `LICENSE.txt` file.

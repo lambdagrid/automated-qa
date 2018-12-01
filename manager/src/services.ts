@@ -1,3 +1,4 @@
+import { deepEqual } from "assert";
 import { CronJob } from "cron";
 import * as crypto from "crypto";
 import * as request from "request-promise-native";
@@ -6,6 +7,7 @@ import { Application } from "./app";
 import {
   ApiKey,
   Assertion,
+  AssertionResult,
   Checklist,
   Flow,
   IFlowRunSummary,
@@ -63,22 +65,22 @@ export class ChecklistService {
     this.app = app;
   }
 
-  public entityFromRow(row: { id: number; worker_origin: string; api_key_id: number }): Checklist {
-    return new Checklist(row.id, row.worker_origin, row.api_key_id);
+  public entityFromRow(row: { id: number; worker_url: string; api_key_id: number }): Checklist {
+    return new Checklist(row.id, row.worker_url, row.api_key_id);
   }
 
-  public async create(apiKeyId: number, workerOrigin: string): Promise<Checklist> {
+  public async create(apiKeyId: number, workerUrl: string): Promise<Checklist> {
     const result = await this.app.database.query(
-      `insert into checklists (api_key_id, worker_origin) values ($1, $2) returning *`,
-      [apiKeyId, workerOrigin],
+      `insert into checklists (api_key_id, worker_url) values ($1, $2) returning *`,
+      [apiKeyId, workerUrl],
     );
     return this.entityFromRow(result.rows[0]);
   }
 
   public async update(checklist: Checklist) {
-    await this.app.database.query(`update checklists set worker_origin = $2 where id = $1`, [
+    await this.app.database.query(`update checklists set worker_url = $2 where id = $1`, [
       checklist.id,
-      checklist.workerOrigin,
+      checklist.workerUrl,
     ]);
   }
 
@@ -125,20 +127,11 @@ export class ChecklistService {
       flow.assertions = snapshots.map((s) => s.toAssertion());
     }
     const result = await request.post({
-      body: {
-        flows: flows.map((f) => ({
-          assertions: f.assertions.map((a) => ({
-            name: a.nameWithoutNumber(),
-            snapshot: a.snapshot,
-          })),
-          name: f.name,
-        })),
-      },
       json: true,
-      uri: checklist.workerOrigin + "/v0/run",
+      uri: checklist.workerUrl,
     });
 
-    for (const flow of result.flows) {
+    for (const flow of result) {
       flow.summary = { match: 0, miss: 0, new: 0 } as IFlowRunSummary;
 
       let databaseFlow = flows.find((f) => f.name === flow.name);
@@ -162,18 +155,29 @@ export class ChecklistService {
             databaseFlow.id, assertionName, assertion.snapshot,
           );
           databaseAssertion = snapshot.toAssertion();
+          assertion.result = AssertionResult.New;
+        } else {
+          // An snapshot already exists, let's compare them
+          try {
+            const value = JSON.parse(assertion.snapshot);
+            const expectedValue = JSON.parse(databaseAssertion.snapshot);
+            deepEqual(value, expectedValue);
+            assertion.result = AssertionResult.Match;
+          } catch (e) {
+            assertion.result = AssertionResult.Miss;
+          }
+          if (assertion.result === AssertionResult.Miss) {
+            assertion.expectedSnapshot = databaseAssertion.snapshot;
+          }
         }
 
-        // Augment worker response with saved snapshot data & summary
+        // Augment worker response with saved snapshot data & summary + result
         assertion.name = assertionName;
-        if (assertion.result === "MISS") {
-          assertion.expectedSnapshot = databaseAssertion.snapshot;
-        }
         flow.summary[assertion.result.toLowerCase()]++;
       }
     }
 
-    return result.flows as Flow[];
+    return result as Flow[];
   }
 }
 
@@ -225,7 +229,7 @@ export class SnapshotService {
   public async update(checklistId: number, flowName: string, name: string, value: string): Promise<void> {
     const query = `insert into snapshots (flow_id, name, value)
       values ((select id from flows where checklist_id = $1 and name = $2), $3, $4)
-      on conflict (flow_id, name) do nothing`;
+      on conflict (flow_id, name) do update set value = EXCLUDED.value`;
     await this.app.database.query(query, [checklistId, flowName, name, value]);
   }
 
@@ -286,8 +290,8 @@ export class ScheduleService {
 
   public startCron() {
     setInterval(() => {
-      this.scheduleSchedules().catch((e) => log("scheduleSchedules:", e));
-      this.runPendingSchedules().catch((e) => log("runPendingSchedules:", e));
+      this.scheduleChecklists().catch((e) => log("scheduleChecklists:", e));
+      this.runPendingChecklists().catch((e) => log("runPendingChecklists:", e));
     }, 1000);
   }
 
@@ -296,7 +300,7 @@ export class ScheduleService {
   // same moment.
   // This means that we need to periodically go through schedules that just ran
   // and re-compute a next_run_at date for them.
-  private async scheduleSchedules() {
+  private async scheduleChecklists() {
     // Here we add a delay of 1 second before allowing a schedule to get
     // it's next_run_at schedule computed to avoid the case of a cron job
     // that would run multiple times in the space of a second
@@ -312,7 +316,7 @@ export class ScheduleService {
     }
   }
 
-  private async runPendingSchedules() {
+  private async runPendingChecklists() {
     const result = await this.app.database.query(`update schedules
       set last_ran_at = now(), next_run_at = null
       where now() >= next_run_at returning *`);

@@ -11,18 +11,18 @@ export class ApiKey {
 export class Checklist {
   public id: number;
   public apiKeyId: number;
-  public workerOrigin: string;
+  public workerUrl: string;
 
-  constructor(id: number, workerOrigin: string, apiKeyId?: number) {
+  constructor(id: number, workerUrl: string, apiKeyId?: number) {
     this.id = id;
-    this.workerOrigin = workerOrigin;
+    this.workerUrl = workerUrl;
     this.apiKeyId = apiKeyId;
   }
 
   public toJSON() {
     return {
       id: this.id,
-      workerOrigin: this.workerOrigin,
+      workerUrl: this.workerUrl,
     };
   }
 }
@@ -45,6 +45,13 @@ export class Flow {
     this.assertions = [];
     this.summary = { match: 0, miss: 0, new: 0 } as IFlowRunSummary;
   }
+}
+
+export enum AssertionResult {
+  Unknown = "UNKNOWN",
+  New = "NEW",
+  Match = "MATCH",
+  Miss = "MISS",
 }
 
 export class Assertion {

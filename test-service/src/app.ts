@@ -97,7 +97,7 @@ export class Application {
         return console.log(err);
       }
       // tslint:disable-next-line:no-console
-      console.log(`server is listening on ${port}`);
+      console.log(`automated-qa test-service listening on port ${port}`);
     });
   }
 }
