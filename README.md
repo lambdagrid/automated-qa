@@ -20,7 +20,7 @@ Automated QA distinguishes itself from manual QA, QA agencies, and on-demand QA 
 
 This project distinguishes itself from popular open source libraries for unit testing, integration testing, and e2e testing with the following:
 * **Test the system from the user's point of view**: The system is a black box to the users, so Automated QA treats your system like a black box too for more accurate, helpful tests.
-* **Minimal setup or configuration required**: Clone the repo, script some QA flows, and deploy the service. Or wait for the hosted version so you don't have to manage it yourself.
+* **Minimal setup or configuration required**: Clone the repo, script some QA flows, and deploy the service. Or wait for the hosted version so you don't have to manage it yourself. (Email <support@lambdagrid.com> to be notified when the hosted version is ready.)
 * **Any junior developer can write QA tests**: Scripts with Automated QA are designed to be accessible to entry-level developers.
 * **Easy to maintain the tests**: We use snapshot testing inspired by Facebook's [Jest](https://jestjs.io/) library to minimize maintenance costs.
 
