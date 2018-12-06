@@ -25,7 +25,7 @@ This project distinguishes itself from popular open source libraries for unit te
 * **Easy to maintain the tests**: We use snapshot testing inspired by Facebook's [Jest](https://jestjs.io/) library to minimize maintenance costs.
 
 Given that snapshot testing is a key design decision for Automated QA, we also want to talk about how this project distinguishes itself from Facebook's Jest library:
-* **Focus on QA**: Jest is a generalist tool with a broad scope, while Automated QA is a specialized tool with a narrow scope. Jest could be used for unit tests, or stretched for e2e tests. Automated QA to be excellent at only automating QA.
+* **Focus on QA**: Jest is a generalist tool with a broad scope, while Automated QA is a specialized tool with a narrow scope. Jest could be used for unit tests, or stretched for e2e tests. Automated QA aims to be excellent at only automating QA.
 * **Ease of monitoring**: Monitoring production environments is not a first class concern for Jest, but it is for Automated QA. Jest's primary runtime environment is a developer's local environment. You could stretch it to run in CI or other environments, but you'll be largely on your own to make it work. Automated QA is extremely concerned with being easy to run in CI and also easy to schedule for a production environment.
 
 <img src="https://i.imgur.com/wCPlswA.png" alt="Nabis uses Automated QA by LambdaGrid" style="max-width:400px;"/>
