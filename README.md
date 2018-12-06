@@ -36,7 +36,11 @@ Engineers at Nabis, a cannabis startup based in Oakland, CA, trust Automated QA 
 
 We have big goals for where Automated QA will go.
 
+## Hosted version of Automated QA
+
 A hosted version of Automated QA is in the works. This will include a web dashboard, reporting, alerting, and an SLA. Email <support@lambdagrid.com> if you want us to notify you when it's ready for you to use!
+
+## Testing more than just APIs
 
 We plan to expand beyond API testing and eventually test the following:
 * Web UIs
@@ -44,6 +48,8 @@ We plan to expand beyond API testing and eventually test the following:
 * Emails
 * Text files
 * Generated PDFs and images
+
+## Improving the core capabilities
 
 We'd also like to improve our current capabilities in several ways:
 * Parallelize the execution of QA checklist workers for more speed
