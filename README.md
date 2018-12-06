@@ -27,3 +27,19 @@ This project distinguishes itself from popular open source libraries for unit te
 Given that snapshot testing is a key design decision for Automated QA, we also want to talk about how this project distinguishes itself from Facebook's Jest library:
 * **Focus on QA**: Jest is a generalist tool with a broad scope, while Automated QA is a specialized tool with a narrow scope. Jest could be used for unit tests, or stretched for e2e tests. Automated QA to be excellent at only automating QA.
 * **Ease of monitoring**: Monitoring production environments is not a first class concern for Jest, but it is for Automated QA. Jest's primary runtime environment is a developer's local environment. You could stretch it to run in CI or other environments, but you'll be largely on your own to make it work. Automated QA is extremely concerned with being easy to run in CI and also easy to schedule for a production environment.
+
+# Roadmap
+
+We have big goals for where Automated QA will go.
+
+We plan to expand beyond API testing and eventually test the following:
+* Web UIs
+* Mobile UIs
+* Emails
+* Text files
+* Generated PDFs and images
+
+We'd also like to improve our current capabilities in several ways:
+* Parallelize the execution of QA checklist workers for more speed
+* Connect worker and manager services with message queues instead of HTTP for more scalability
+* Rearchitect the scheduler for more resiliency
