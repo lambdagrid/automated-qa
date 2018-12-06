@@ -28,6 +28,10 @@ Given that snapshot testing is a key design decision for Automated QA, we also w
 * **Focus on QA**: Jest is a generalist tool with a broad scope, while Automated QA is a specialized tool with a narrow scope. Jest could be used for unit tests, or stretched for e2e tests. Automated QA to be excellent at only automating QA.
 * **Ease of monitoring**: Monitoring production environments is not a first class concern for Jest, but it is for Automated QA. Jest's primary runtime environment is a developer's local environment. You could stretch it to run in CI or other environments, but you'll be largely on your own to make it work. Automated QA is extremely concerned with being easy to run in CI and also easy to schedule for a production environment.
 
+<img src="https://i.imgur.com/wCPlswA.png" alt="Nabis uses Automated QA by LambdaGrid" style="max-width:400px;"/>
+
+Engineers at Nabis, a cannabis startup based in Oakland, CA, trust Automated QA to deploy more frequently and confidently.
+
 # Roadmap
 
 We have big goals for where Automated QA will go.
