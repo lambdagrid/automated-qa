@@ -47,3 +47,24 @@ We'd also like to improve our current capabilities in several ways:
 * Parallelize the execution of QA checklist workers for more speed
 * Connect worker and manager services with message queues instead of HTTP for more scalability
 * Rearchitect the scheduler for more resiliency
+
+<!-- Begin Mailchimp Signup Form -->
+<div id="mc_embed_signup">
+<form action="https://lambdagrid.us19.list-manage.com/subscribe/post?u=0cdb6c21f97589e36e252107e&amp;id=1888bc2206" method="post" id="mc-embedded-subscribe-form" name="mc-embedded-subscribe-form" class="validate" target="_blank" novalidate>
+    <div id="mc_embed_signup_scroll">
+	<h2>Add your email if you want a hosted version of Automated QA</h2>
+<div class="mc-field-group">
+	<label for="mce-EMAIL">Email Address </label>
+	<input type="email" value="" name="EMAIL" class="required email" id="mce-EMAIL">
+</div>
+	<div id="mce-responses" class="clear">
+		<div class="response" id="mce-error-response" style="display:none"></div>
+		<div class="response" id="mce-success-response" style="display:none"></div>
+	</div>    <!-- real people should not fill this in and expect good things - do not remove this or risk form bot signups-->
+    <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_0cdb6c21f97589e36e252107e_1888bc2206" tabindex="-1" value=""></div>
+    <div class="clear"><input type="submit" value="Subscribe" name="subscribe" id="mc-embedded-subscribe" class="button"></div>
+    </div>
+</form>
+</div>
+
+<!--End mc_embed_signup-->
