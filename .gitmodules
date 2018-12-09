@@ -4,3 +4,6 @@
 [submodule "test"]
 	path = test
 	url = git@github.com:lambdagrid/automated-qa-test.git
+[submodule "manager"]
+	path = manager
+	url = git@github.com:lambdagrid/automated-qa-manager.git
