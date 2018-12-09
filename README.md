@@ -58,6 +58,10 @@ The worker's job is to run the checklists, and that's it. The checklists are Nod
 
 The manager's job is to, well, manage. It manages the workers by telling them when to run their checklists and to serve observations. It also manages the snapshots, creating and updating and deleting them as needed. It manages the assertion process, by diffing observations against snapshots. And lastly, it manages schedules of checklists, and communication to any subscribing services via webhooks.
 
+### How managers and workers interact
+
+Currently managers will send requests to workers via HTTP requests. The reason for this was due to development velocity. However, we're considering reworking the managers and workers to communicate via message queues instead to simplify the architecture and increase scalability.
+
 # Roadmap
 
 We have big goals for where Automated QA will go.
