@@ -11,11 +11,20 @@ We want to create the following benefits for engineering teams:
 * **Relief**: Sleep better at night knowing that Automated QA constantly monitors your end-to-end functionality, and that you'll be alerted when something breaks.
 * **Velocity**: Deploy your code more frequently. Allow new developers to contribute more quickly, without breaking anything.
 
+## What is a QA assistant? What does Automated QA actually do?
+
+A QA assistant is a standalone web service that runs QA scripts to verify your application's behavior. Its intended use is to verify behavior during deployments and monitor behavior at any time of day or week.
+
+Automated QA has the following features:
+
+* **Node.js client library**: Help engineers write their QA checklists.
+* **Snapshot testing**: Reduce the tedium of maintaining your QA tests. In any type of testing, assertions fail because system behavior changed, either accidentally or intentionally. If the change is accidental, the user will update the system until the assertions pass. Otherwise, if the change is intentional, then Automated QA will update the assertions on behalf of the user. Without snapshot testing, the users would have to update the assertions manually themselves.
+* **Schedules**: Use a cron expression to configure Automated QA to run your QA checklists on a schedule.
+* **Webhook notifications**: Configure your own custom notifications to be alerted whenever checklists start, when they finish, and whether the checklist passed or failed upon completion.
+
 ## What distinguishes Automated QA from other testing solutions?
 
-Automated QA is a QA assistant.
-
-It distinguishes itself from manual QA, QA agencies, and on-demand QA solutions with the following:
+As a QA assistant, Automated QA distinguishes itself from manual QA, QA agencies, and on-demand QA solutions with the following:
 * **Automation**: These other solutions are all manual, and Automated QA is, well, automated. Script your tests once and trigger your scripts to run anytime.
 * **Speed**: Automated tests are faster than manual tests.
 * **Monitoring**: Schedule regular testing of your application's health, as frequently as every minute if needed.
