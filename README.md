@@ -99,6 +99,7 @@ We plan to expand beyond API testing and eventually test the following:
 ## Improving the core capabilities
 
 We'd also like to improve our current capabilities in several ways:
+* Make it easier to get started with our open source offering
 * Parallelize the execution of QA checklist workers for more speed
 * Connect worker and manager services with message queues instead of HTTP for more scalability
 * Rearchitect the scheduler for more resiliency
