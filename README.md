@@ -34,6 +34,14 @@ Given that snapshot testing is a key design decision for Automated QA, we also w
 
 Engineers at Nabis, a cannabis startup based in Oakland, CA, trust Automated QA to deploy more frequently and confidently.
 
+# Getting started
+
+Getting started with the open source offering of Automated QA is, admittedly, not the simplest task right now. While we work to make it simpler, the current steps are:
+
+1. Write your QA checklist. You can see an example [here](https://github.com/lambdagrid/automated-qa-test).
+2. Deploy your worker. You can find instructions [here](https://github.com/lambdagrid/automated-qa-worker).
+3. Deploy your manager. You can find instructions [here](https://github.com/lambdagrid/automated-qa-manager).
+
 # Architecture: How it works
 
 ## Primitives
